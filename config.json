@@ -1,0 +1,20 @@
+{
+  "device_id": "virtual_esp32_01",
+  "mqtt": {
+    "broker": "broker.hivemq.com",
+    "port": 1883,
+    "sensor_topic": "plantcare/device1/sensors",
+    "actuator_topic": "plantcare/device1/actuators",
+    "actuator_state_topic": "plantcare/device1/actuator_state"
+  },
+  "sensors": {
+    "soil_moisture": {"min": 300, "max": 800},
+    "temperature": {"min": 20, "max": 35},
+    "humidity": {"min": 40, "max": 90}
+  },
+  "thresholds": {
+    "moisture_threshold": 600
+  },
+  "database": "plant_data.db",
+  "update_interval": 60
+}

@@ -6,6 +6,8 @@ import { HistoryChart } from './components/HistoryChart';
 function App() {
   const [readings, setReadings] = useState([]);
   const [groupedData, setGroupedData] = useState({});
+  const [wateringStates, setWateringStates] = useState({}); // { deviceId: boolean }
+
 
   const fetchData = async () => {
     try {
@@ -28,6 +30,30 @@ function App() {
       }
     } catch (error) {
       console.error("Failed to fetch data:", error);
+    }
+  };
+
+  const handleWaterNow = async (deviceId) => {
+    try {
+      setWateringStates(prev => ({ ...prev, [deviceId]: true }));
+
+      await fetch('http://localhost:3001/api/commands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId, command: 'PUMP_ON' })
+      });
+      // alert(`Watering command sent to ${deviceId}!`); 
+      // Removed alert for smoother UX, button shows state now.
+
+      // Reset state after 5 seconds (matching firmware duration)
+      setTimeout(() => {
+        setWateringStates(prev => ({ ...prev, [deviceId]: false }));
+      }, 5000);
+
+    } catch (err) {
+      console.error(err);
+      alert('Failed to send command');
+      setWateringStates(prev => ({ ...prev, [deviceId]: false }));
     }
   };
 
@@ -58,11 +84,56 @@ function App() {
         const plants = latestreading.plants || [];
 
         return (
+
           <div key={deviceId} style={{ marginBottom: '3rem' }}>
-            <h2 style={{ borderBottom: '1px solid #334155', paddingBottom: '0.5rem', marginBottom: '1.5rem', textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.9rem', color: '#94a3b8' }}>
-              Device: <span style={{ color: 'white' }}>{deviceId}</span>
-              {latestreading.pump_state === 1 && <span style={{ marginLeft: '10px', color: '#f59e0b', fontSize: '0.8rem' }}>⚡ PUMP ON</span>}
-            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>
+              <h2 style={{ textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.9rem', color: '#94a3b8', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                Device: <span style={{ color: 'white' }}>{deviceId}</span>
+                {(() => {
+                  // Check Online Status
+                  // SQLite returns "YYYY-MM-DD HH:MM:SS" (UTC)
+                  // We must append 'Z' to force JS to parse it as UTC
+                  const rawTime = latestreading.timestamp;
+                  const timeStr = rawTime.endsWith('Z') ? rawTime : rawTime + 'Z';
+                  const lastSeen = new Date(timeStr).getTime();
+                  const now = new Date().getTime();
+
+                  const diff = now - lastSeen;
+                  // console.log(`Dev ${deviceId}: lastSeen=${timeStr}, diff=${diff}`);
+
+                  const isOnline = diff < 45000; // 45 seconds tolerance
+
+                  return (
+                    <span style={{
+                      fontSize: '0.7rem',
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      backgroundColor: isOnline ? '#10b98120' : '#334155',
+                      color: isOnline ? '#10b981' : '#94a3b8',
+                      border: `1px solid ${isOnline ? '#10b98140' : '#475569'}`
+                    }}>
+                      {isOnline ? '● Online' : '○ Offline'}
+                    </span>
+                  );
+                })()}
+
+                {latestreading.pump_state === 1 && <span style={{ marginLeft: '10px', color: '#f59e0b', fontSize: '0.8rem' }}>⚡ PUMP ON</span>}
+              </h2>
+              <button
+                className="btn-primary"
+                style={{
+                  fontSize: '0.8rem',
+                  padding: '0.4rem 0.8rem',
+                  backgroundColor: wateringStates[deviceId] ? '#f59e0b' : '',
+                  cursor: wateringStates[deviceId] ? 'not-allowed' : 'pointer',
+                  opacity: wateringStates[deviceId] ? 0.8 : 1
+                }}
+                onClick={() => handleWaterNow(deviceId)}
+                disabled={wateringStates[deviceId]}
+              >
+                {wateringStates[deviceId] ? '⏳ Watering...' : '💧 Water Now'}
+              </button>
+            </div>
 
             <div style={{
               display: 'grid',

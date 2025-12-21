@@ -99,6 +99,20 @@ void loop() {
     if (httpResponseCode > 0) {
       String response = http.getString();
       Serial.println("Server Response: " + response);
+
+      // Parse Response for Commands
+      StaticJsonDocument<200> resDoc;
+      DeserializationError error = deserializeJson(resDoc, response);
+      if (!error) {
+        const char* cmd = resDoc["command"];
+        if (cmd && strcmp(cmd, "PUMP_ON") == 0) {
+          Serial.println("COMMAND RECEIVED: PUMPON");
+          digitalWrite(PUMP_PIN, HIGH);
+          delay(5000); // Keep on for 5 seconds (Blocking for simplicity)
+          digitalWrite(PUMP_PIN, LOW);
+          Serial.println("Pump sequence finished.");
+        }
+      }
     } else {
       Serial.print("Error on sending POST: ");
       Serial.println(httpResponseCode);

@@ -6,13 +6,17 @@
 #define WIFI_PASS "muvodich"
 
 // Backend Server
-#define SERVER_URL "http://192.168.1.11:3001/api/readings"
-#define DEVICE_ID "esp32-living-room" // Unique ID for this device
+// Backend Server
+#define SERVER_URL "http://192.168.1.12:3001/api/readings"
+
+#ifndef DEVICE_ID
+#define DEVICE_ID "esp32-default" // Fallback
+#endif
 
 // Pin Definitions
 #define DHT_PIN 4
 #define DHT_TYPE DHT22
-#define PUMP_PIN 5      // Digital Output
+#define PUMP_PIN 2      // Digital Output
 
 // Moisture Sensors (List of Analog Pins only)
 // Example: Two plants on pins 34 and 35

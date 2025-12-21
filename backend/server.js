@@ -9,6 +9,11 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(bodyParser.json());
 
+// Root endpoint for health check
+app.get('/', (req, res) => {
+    res.send('PlantCare API is Running! 🌿');
+});
+
 // GET /api/readings - Get latest readings (Grouped by Device logic to be handled by Frontend or here)
 // For now, return flat list of readings with nested plants
 app.get('/api/readings', (req, res) => {

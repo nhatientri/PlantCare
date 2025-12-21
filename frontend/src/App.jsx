@@ -9,9 +9,12 @@ function App() {
   const [wateringStates, setWateringStates] = useState({}); // { deviceId: boolean }
 
 
+  // Use Environment Variable for API URL (Vite style)
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
   const fetchData = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/readings?limit=100');
+      const response = await fetch(`${API_URL}/api/readings?limit=100`);
       const json = await response.json();
 
       if (json.data && json.data.length > 0) {
@@ -37,7 +40,8 @@ function App() {
     try {
       setWateringStates(prev => ({ ...prev, [deviceId]: true }));
 
-      await fetch('http://localhost:3001/api/commands', {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      await fetch(`${API_URL}/api/commands`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ deviceId, command: 'PUMP_ON' })

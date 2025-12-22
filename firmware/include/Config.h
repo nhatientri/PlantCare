@@ -7,7 +7,7 @@
 
 // Backend Server
 // Backend Server
-#define SERVER_URL "http://192.168.1.12:3001/api/readings"
+#define SERVER_URL "https://plantcare-tk1w.onrender.com/api/readings"
 
 #ifndef DEVICE_ID
 #define DEVICE_ID "esp32-default" // Fallback
@@ -31,5 +31,12 @@ const int MOISTURE_PINS[] = {34, 35};
 
 // Loop Timing
 #define READ_INTERVAL 5000 // 5 seconds
+
+// Time & Schedule (NTP)
+#define NTP_SERVER "pool.ntp.org"
+#define GMT_OFFSET_SEC 25200 // UTC+7 (Vietnam)
+#define DST_OFFSET_SEC 0
+#define START_HOUR 6  // 6:00 AM
+#define END_HOUR 22   // 10:00 PM
 
 #endif

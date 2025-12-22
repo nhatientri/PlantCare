@@ -4,6 +4,7 @@
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 #include <ArduinoJson.h>
+#include "time.h"
 #include "Config.h"
 
 DHT dht(DHT_PIN, DHT_TYPE);
@@ -32,6 +33,9 @@ void setup() {
   Serial.println("\nWiFi Connected!");
   Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
+
+  // Init Time
+  configTime(GMT_OFFSET_SEC, DST_OFFSET_SEC, NTP_SERVER);
 }
 
 void loop() {
@@ -75,10 +79,32 @@ void loop() {
     }
   }
 
-  // Control Pump
+  // Check Time Schedule
+  struct tm timeinfo;
+  bool isDaytime = true; // Default to true if time fails, or false? Let's default true to be safe, or false to save water.
+  
+  if (getLocalTime(&timeinfo)) {
+    // Valid time obtained
+    if (timeinfo.tm_hour >= START_HOUR && timeinfo.tm_hour < END_HOUR) {
+      isDaytime = true;
+    } else {
+      isDaytime = false;
+    }
+    Serial.printf("Time: %02d:%02d. Daytime? %s\n", timeinfo.tm_hour, timeinfo.tm_min, isDaytime ? "YES" : "NO");
+  } else {
+    Serial.println("Time sync failed, assuming safe mode (Daytime=TRUE)");
+  }
+
+  // Control Pump (Auto)
   if (pumpNeedsOn) {
-    Serial.println("Warning: Low moisture detected! Pump ON.");
-    digitalWrite(PUMP_PIN, HIGH);
+    if (isDaytime) {
+       Serial.println("Warning: Low moisture + Daytime. Pump ON.");
+       digitalWrite(PUMP_PIN, HIGH);
+    } else {
+       Serial.println("Low moisture but NIGHT TIME. Skipping Pump.");
+       pumpNeedsOn = false; // Update state for backend reporting
+       digitalWrite(PUMP_PIN, LOW);
+    }
   } else {
     digitalWrite(PUMP_PIN, LOW);
   }

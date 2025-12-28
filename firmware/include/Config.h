@@ -25,8 +25,8 @@ const int MOISTURE_PINS[] = {34, 35};
 
 
 // Calibration
-#define MOISTURE_AIR 4095
-#define MOISTURE_WATER 0
+#define MOISTURE_AIR 2600
+#define MOISTURE_WATER 1000
 #define MOISTURE_THRESHOLD 30 // Threshold for ANY plant to trigger pump
 
 // Loop Timing

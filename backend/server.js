@@ -3,58 +3,148 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const db = require('./database');
 
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
 const app = express();
 const PORT = process.env.PORT || 3001;
+const SECRET_KEY = process.env.SECRET_KEY || "super_secret_key_change_me_in_prod"; // Fallback for dev, env for prod
 
 app.use(cors());
 app.use(bodyParser.json());
+
+// Authentication Middleware
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) return res.sendStatus(401);
+
+    jwt.verify(token, SECRET_KEY, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
+        next();
+    });
+};
 
 // Root endpoint for health check
 app.get('/', (req, res) => {
     res.send('PlantCare API is Running! 🌿');
 });
 
-// GET /api/readings - Get latest readings (Grouped by Device logic to be handled by Frontend or here)
-// For now, return flat list of readings with nested plants
-app.get('/api/readings', (req, res) => {
-    const limit = req.query.limit || 50;
+// AUTH ROUTES
+app.post('/api/auth/register', async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: "Username and password required" });
 
-    // We get the main readings
-    const sql = `SELECT * FROM readings ORDER BY timestamp DESC LIMIT ?`;
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        db.run('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword], function (err) {
+            if (err) {
+                if (err.message.includes('UNIQUE constraint failed')) {
+                    return res.status(400).json({ error: "Username already exists" });
+                }
+                return res.status(500).json({ error: err.message });
+            }
+            res.status(201).json({ message: "User created", userId: this.lastID });
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
-    db.all(sql, [limit], (err, rows) => {
-        if (err) {
-            res.status(400).json({ "error": err.message });
-            return;
+app.post('/api/auth/login', (req, res) => {
+    const { username, password } = req.body;
+    db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!user) return res.status(400).json({ error: "User not found" });
+
+        if (await bcrypt.compare(password, user.password)) {
+            const token = jwt.sign({ id: user.id, username: user.username }, SECRET_KEY);
+            res.json({ token });
+        } else {
+            res.status(403).json({ error: "Invalid credentials" });
+        }
+    });
+});
+
+// DEVICE ROUTES
+app.post('/api/devices/claim', authenticateToken, (req, res) => {
+    const { deviceId, name } = req.body;
+    if (!deviceId) return res.status(400).json({ error: "Device ID required" });
+
+    // Check if device is already claimed
+    db.get('SELECT * FROM devices WHERE device_id = ?', [deviceId], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (row) {
+            // Already claimed, maybe by multiple users or unique? Let's assume unique ownership for now.
+            // If we want multiple users to see one device, we need a many-to-many table.
+            // For simplify as per plan: "Users will only be able to see readings from devices they own." -> Implies unique ownership.
+            return res.status(400).json({ error: "Device already claimed" });
         }
 
-        // Now we need to fetch plant readings for these IDs. 
-        // This is N+1 but acceptable for small scale sqlite.
-        // A better way is a JOIN, but mapping it back to nested JSON in JS is also fine.
+        db.run('INSERT INTO devices (device_id, user_id, name) VALUES (?, ?, ?)', [deviceId, req.user.id, name], function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: "Device claimed successfully" });
+        });
+    });
+});
 
-        if (rows.length === 0) {
+app.get('/api/devices', authenticateToken, (req, res) => {
+    db.all('SELECT * FROM devices WHERE user_id = ?', [req.user.id], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ data: rows });
+    });
+});
+
+// GET /api/readings - Get latest readings (Protected & Filtered)
+app.get('/api/readings', authenticateToken, (req, res) => {
+    const limit = req.query.limit || 50;
+    const userId = req.user.id;
+
+    // Fetch user's devices first
+    db.all('SELECT device_id FROM devices WHERE user_id = ?', [userId], (err, devices) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        if (devices.length === 0) {
             return res.json({ "message": "success", "data": [] });
         }
 
-        const ids = rows.map(r => r.id).join(',');
-        const plantSql = `SELECT * FROM plant_readings WHERE reading_id IN (${ids})`;
+        const deviceIds = devices.map(d => `'${d.device_id}'`).join(',');
 
-        db.all(plantSql, [], (err, plantRows) => {
+        // Filter readings by these device IDs
+        const sql = `SELECT * FROM readings WHERE device_id IN (${deviceIds}) ORDER BY timestamp DESC LIMIT ?`;
+
+        db.all(sql, [limit], (err, rows) => {
             if (err) {
-                // If error, just return readings without plants? Or fail.
-                console.error(err);
-                return res.json({ "message": "success", "data": rows });
+                res.status(400).json({ "error": err.message });
+                return;
             }
 
-            // Map plants to readings
-            const readingsWithPlants = rows.map(reading => {
-                const plants = plantRows.filter(p => p.reading_id === reading.id);
-                return { ...reading, plants: plants.map(p => ({ index: p.sensor_index, moisture: p.moisture })) };
-            });
+            if (rows.length === 0) {
+                return res.json({ "message": "success", "data": [] });
+            }
 
-            res.json({
-                "message": "success",
-                "data": readingsWithPlants
+            // Fetch plant readings
+            const readingIds = rows.map(r => r.id).join(',');
+            const plantSql = `SELECT * FROM plant_readings WHERE reading_id IN (${readingIds})`;
+
+            db.all(plantSql, [], (err, plantRows) => {
+                if (err) {
+                    console.error(err);
+                    return res.json({ "message": "success", "data": rows });
+                }
+
+                // Map plants to readings
+                const readingsWithPlants = rows.map(reading => {
+                    const plants = plantRows.filter(p => p.reading_id === reading.id);
+                    return { ...reading, plants: plants.map(p => ({ index: p.sensor_index, moisture: p.moisture })) };
+                });
+
+                res.json({
+                    "message": "success",
+                    "data": readingsWithPlants
+                });
             });
         });
     });
@@ -64,14 +154,21 @@ app.get('/api/readings', (req, res) => {
 const commands = {};
 
 // POST /api/commands - Queue a command for a device
-app.post('/api/commands', (req, res) => {
+app.post('/api/commands', authenticateToken, (req, res) => {
     const { deviceId, command } = req.body;
     if (!deviceId || !command) {
         return res.status(400).json({ error: "Missing deviceId or command" });
     }
-    console.log(`Queueing command '${command}' for ${deviceId}`);
-    commands[deviceId] = command;
-    res.json({ message: "Command queued", deviceId, command });
+
+    // Check ownership
+    db.get('SELECT * FROM devices WHERE device_id = ? AND user_id = ?', [deviceId, req.user.id], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(403).json({ error: "You do not own this device" });
+
+        console.log(`Queueing command '${command}' for ${deviceId}`);
+        commands[deviceId] = command;
+        res.json({ message: "Command queued", deviceId, command });
+    });
 });
 
 // POST /api/readings - Save a new reading

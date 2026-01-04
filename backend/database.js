@@ -28,6 +28,21 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 moisture REAL,
                 FOREIGN KEY(reading_id) REFERENCES readings(id)
             )`);
+
+            // Users Table
+            db.run(`CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE,
+                password TEXT
+            )`);
+
+            // Devices Table (Ownership)
+            db.run(`CREATE TABLE IF NOT EXISTS devices (
+                device_id TEXT PRIMARY KEY,
+                user_id INTEGER,
+                name TEXT,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`);
         });
     }
 });

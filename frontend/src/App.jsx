@@ -1,20 +1,39 @@
 import React, { useEffect, useState } from 'react';
-import { Droplets, Thermometer, Wind, Sprout } from 'lucide-react';
+import { Droplets, Thermometer, Wind, Sprout, LogOut, PlusCircle } from 'lucide-react';
 import { SensorCard } from './components/SensorCard';
 import { HistoryChart } from './components/HistoryChart';
+import { Login } from './components/Login';
+import { Register } from './components/Register';
+import { useAuth } from './context/AuthContext';
 
 function App() {
+  const { token, logout, isAuthenticated } = useAuth();
   const [readings, setReadings] = useState([]);
   const [groupedData, setGroupedData] = useState({});
   const [wateringStates, setWateringStates] = useState({}); // { deviceId: boolean }
+  const [showRegister, setShowRegister] = useState(false);
 
+  // Device Claiming State
+  const [claimId, setClaimId] = useState('');
+  const [claimName, setClaimName] = useState('');
+  const [claimError, setClaimError] = useState('');
 
   // Use Environment Variable for API URL (Vite style)
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
   const fetchData = async () => {
+    if (!token) return;
+
     try {
-      const response = await fetch(`${API_URL}/api/readings?limit=100`);
+      const response = await fetch(`${API_URL}/api/readings?limit=100`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        logout();
+        return;
+      }
+
       const json = await response.json();
 
       if (json.data && json.data.length > 0) {
@@ -30,6 +49,9 @@ function App() {
           groups[reading.device_id] = reading;
         });
         setGroupedData(groups);
+      } else {
+        setGroupedData({});
+        setReadings([]);
       }
     } catch (error) {
       console.error("Failed to fetch data:", error);
@@ -40,14 +62,14 @@ function App() {
     try {
       setWateringStates(prev => ({ ...prev, [deviceId]: true }));
 
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
       await fetch(`${API_URL}/api/commands`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ deviceId, command: 'PUMP_ON' })
       });
-      // alert(`Watering command sent to ${deviceId}!`); 
-      // Removed alert for smoother UX, button shows state now.
 
       // Reset state after 5 seconds (matching firmware duration)
       setTimeout(() => {
@@ -61,26 +83,111 @@ function App() {
     }
   };
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  const handleClaimDevice = async (e) => {
+    e.preventDefault();
+    setClaimError('');
+    if (!claimId) return;
 
+    try {
+      const res = await fetch(`${API_URL}/api/devices/claim`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ deviceId: claimId, name: claimName || 'My Plant' })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setClaimId('');
+        setClaimName('');
+        alert('Device claimed successfully!');
+        fetchData(); // Refresh data
+      } else {
+        setClaimError(data.error || 'Failed to claim device');
+      }
+    } catch (err) {
+      setClaimError('Network error');
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchData();
+      const interval = setInterval(fetchData, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, token]);
+
+  // Auth Flow Views
+  if (!isAuthenticated) {
+    return (
+      <div className="auth-container">
+        <header style={{ textAlign: 'center', padding: '2rem' }}>
+          <div style={{ display: 'inline-flex', backgroundColor: '#10b981', padding: '0.5rem', borderRadius: '8px', marginBottom: '1rem' }}>
+            <Sprout size={32} color="white" />
+          </div>
+          <h1>PlantCare Pro</h1>
+        </header>
+        {showRegister ? (
+          <Register onSwitchToLogin={() => setShowRegister(false)} />
+        ) : (
+          <Login onSwitchToRegister={() => setShowRegister(true)} />
+        )}
+      </div>
+    );
+  }
+
+  // Dashboard View
   return (
     <div className="dashboard">
-      <header style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
-        <div style={{ backgroundColor: '#10b981', padding: '0.5rem', borderRadius: '8px', display: 'flex' }}>
-          <Sprout size={32} color="white" />
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ backgroundColor: '#10b981', padding: '0.5rem', borderRadius: '8px', display: 'flex' }}>
+            <Sprout size={32} color="white" />
+          </div>
+          <div>
+            <h1>PlantCare Pro</h1>
+            <p style={{ color: 'var(--text-muted)', margin: 0 }}>Multi-Device System</p>
+          </div>
         </div>
-        <div>
-          <h1>PlantCare Pro</h1>
-          <p style={{ color: 'var(--text-muted)', margin: 0 }}>Multi-Device System</p>
-        </div>
+        <button onClick={logout} style={{ background: 'none', border: '1px solid #334155', color: '#94a3b8', padding: '0.5rem 1rem', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <LogOut size={16} /> Logout
+        </button>
       </header>
 
+      {/* Device Claiming Section */}
+      <div style={{ marginBottom: '2rem', padding: '1.5rem', backgroundColor: '#1e293b', borderRadius: '12px', border: '1px solid #334155' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <PlusCircle size={20} color="#10b981" /> Claim New Device
+        </h3>
+        {claimError && <div style={{ color: '#ef4444', marginBottom: '1rem' }}>{claimError}</div>}
+        <form onSubmit={handleClaimDevice} style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            placeholder="Device ID (e.g. esp32-default)"
+            value={claimId}
+            onChange={e => setClaimId(e.target.value)}
+            style={{ flex: 1, padding: '0.8rem', borderRadius: '6px', border: '1px solid #334155', backgroundColor: '#0f172a', color: 'white' }}
+            required
+          />
+          <input
+            type="text"
+            placeholder="Device Name (e.g. Living Room)"
+            value={claimName}
+            onChange={e => setClaimName(e.target.value)}
+            style={{ flex: 1, padding: '0.8rem', borderRadius: '6px', border: '1px solid #334155', backgroundColor: '#0f172a', color: 'white' }}
+          />
+          <button type="submit" className="btn-primary" style={{ padding: '0.8rem 1.5rem' }}>Claim Device</button>
+        </form>
+      </div>
+
       {Object.keys(groupedData).length === 0 && (
-        <div style={{ color: 'var(--text-muted)' }}>No devices connected yet...</div>
+        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)', border: '2px dashed #334155', borderRadius: '12px' }}>
+          <h3>No devices found</h3>
+          <p>Claim a device using the ID found in your firmware logs or labeled on the device.</p>
+        </div>
       )}
 
       {Object.keys(groupedData).map(deviceId => {
@@ -177,9 +284,7 @@ function App() {
         );
       })}
 
-      {/* Global History Chart (Showing generic temp data for now, could be improved to filter) */}
-      {/* Passing all readings for now, Chart might look messy with multiple devices mixed, but keeping simple for MVP */}
-      <HistoryChart data={readings} />
+      {isAuthenticated && readings.length > 0 && <HistoryChart data={readings} />}
     </div>
   );
 }

@@ -68,6 +68,17 @@ app.post('/api/auth/login', (req, res) => {
     });
 });
 
+const mqtt = require('mqtt');
+const mqttClient = mqtt.connect('mqtt://broker.emqx.io:1883');
+
+mqttClient.on('connect', () => {
+    console.log('Connected to MQTT Broker');
+});
+
+mqttClient.on('error', (err) => {
+    console.error('MQTT Error:', err);
+});
+
 // DEVICE ROUTES
 app.post('/api/devices/claim', authenticateToken, (req, res) => {
     const { deviceId, name } = req.body;
@@ -153,7 +164,7 @@ app.get('/api/readings', authenticateToken, (req, res) => {
 // In-memory command queue: { "device_id": "COMMAND_STRING" }
 const commands = {};
 
-// POST /api/commands - Queue a command for a device
+// POST /api/commands - Queue a command for a device AND publish via MQTT
 app.post('/api/commands', authenticateToken, (req, res) => {
     const { deviceId, command } = req.body;
     if (!deviceId || !command) {
@@ -167,7 +178,19 @@ app.post('/api/commands', authenticateToken, (req, res) => {
 
         console.log(`Queueing command '${command}' for ${deviceId}`);
         commands[deviceId] = command;
-        res.json({ message: "Command queued", deviceId, command });
+
+        // MQTT PUBLISH
+        const topic = `plantcare/${deviceId}/command`;
+        mqttClient.publish(topic, command, (err) => {
+            if (err) {
+                console.error("MQTT Publish Error:", err);
+                // We still respond success because we queued it also
+            } else {
+                console.log(`MQTT: Published '${command}' to ${topic}`);
+            }
+        });
+
+        res.json({ message: "Command queued and published", deviceId, command });
     });
 });
 

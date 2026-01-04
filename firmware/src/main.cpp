@@ -16,6 +16,9 @@ DHT dht(DHT_PIN, DHT_TYPE);
 
 unsigned long lastReadTime = 0;
 
+// Forward declaration
+void callback(char* topic, byte* payload, unsigned int length);
+
 
 void setup() {
   Serial.begin(115200);

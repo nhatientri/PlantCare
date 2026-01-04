@@ -9,6 +9,14 @@
 // Backend Server
 #define SERVER_URL "https://plantcare-tk1w.onrender.com/api/readings"
 
+// MQTT Configuration
+#define MQTT_SERVER "broker.emqx.io"
+#define MQTT_PORT 1883
+#define MQTT_USER "" // Empty for public broker
+#define MQTT_PASS ""
+#define MQTT_TOPIC_COMMAND "plantcare/+/command" // + is wildcard for device_id
+#define MQTT_TOPIC_DATA "plantcare/readings"
+
 #ifndef DEVICE_ID
 #define DEVICE_ID "esp32-default" // Fallback
 #endif

@@ -19,6 +19,8 @@ unsigned long lastReadTime = 0;
 // Forward declaration
 void callback(char* topic, byte* payload, unsigned int length);
 
+#include <WiFiManager.h>
+
 
 void setup() {
   Serial.begin(115200);
@@ -34,13 +36,40 @@ void setup() {
   // Initialize DHT
   dht.begin();
 
-  // Connect to WiFi
-  Serial.println("Connecting to WiFi...");
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.print(".");
+
+  Serial.begin(115200);
+  
+  // Initialize Pins
+  pinMode(PUMP_PIN, OUTPUT);
+  digitalWrite(PUMP_PIN, LOW); // Pump OFF initially
+  
+  for(int i=0; i<NUM_PLANTS; i++) {
+    pinMode(MOISTURE_PINS[i], INPUT);
   }
+
+  // Initialize DHT
+  dht.begin();
+
+  // WiFiManager
+  // Local intialization. Once its business is done, there is no need to keep it around
+  WiFiManager wifiManager;
+
+  // Set timeout (optional) - if it can't connect, it restarts or keeps trying
+  // wifiManager.setTimeout(180); 
+
+  // Create a unique AP name based on device ID
+  String apName = "PlantCare-" + String(DEVICE_ID);
+  
+  // If connection fails, it starts an access point with the specified name
+  // and goes into a blocking loop awaiting configuration
+  if (!wifiManager.autoConnect(apName.c_str())) {
+    Serial.println("failed to connect and hit timeout");
+    // reset and try again, or maybe put it to deep sleep
+    ESP.restart();
+    delay(1000);
+  }
+
+  // if you get here you have connected to the WiFi
   Serial.println("\nWiFi Connected!");
   Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());

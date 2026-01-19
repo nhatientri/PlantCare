@@ -1,9 +1,9 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// WiFi Credentials
-#define WIFI_SSID "P5-12B01"
-#define WIFI_PASS "muvodich"
+// WiFi Credentials - Managed by WiFiManager
+// #define WIFI_SSID "..."  <-- Removed
+// #define WIFI_PASS "..."  <-- Removed
 
 // Backend Server
 // Backend Server

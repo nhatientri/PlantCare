@@ -58,6 +58,22 @@ router.post('/', (req, res) => {
 
         const readingId = this.lastID;
 
+        // Emit via Socket.io
+        const io = req.app.get('socketio');
+        if (io) {
+            io.emit('new_reading', {
+                device_id: deviceId,
+                temperature: temperature,
+                humidity: humidity,
+                pump_state: pumpState ? 1 : 0,
+                timestamp: new Date().toISOString(), // Approximation until DB timestamp is fetched
+                plants: plants
+            });
+            console.log(`Socket.io: Emitted new_reading for ${deviceId}`);
+        } else {
+            console.log("Socket.io instance not found on app");
+        }
+
         if (plants && Array.isArray(plants) && plants.length > 0) {
             const placeholder = plants.map(() => '(?, ?, ?)').join(',');
             const flatParams = [];

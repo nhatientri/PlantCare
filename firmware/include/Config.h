@@ -21,6 +21,10 @@
 #define DEVICE_ID "esp32-default" // Fallback
 #endif
 
+// OTA Updates
+#define OTA_HOSTNAME "PlantCare-" DEVICE_ID
+#define OTA_PASSWORD "admin" // Optional security measure
+
 // Pin Definitions
 #define DHT_PIN 4
 #define DHT_TYPE DHT22
@@ -39,6 +43,16 @@ const int MOISTURE_PINS[] = {34, 35};
 
 // Loop Timing
 #define READ_INTERVAL 5000 // 5 seconds
+
+// Watering Logic (Smart)
+#define PUMP_BURST_MS 2000    // Water for 2 seconds
+#define PUMP_SOAK_MS 30000    // Wait 30 seconds for water to soak
+#define MAX_WATERING_CYCLES 3 // Max 3 bursts per session
+#define MAX_DAILY_CYCLES 5    // Max 5 sessions per day (Safety)
+
+// Sensor Safety
+#define SENSOR_MIN_VALID 100  // Anything below this is "disconnected"
+#define SENSOR_MAX_VALID 4000 // Anything above this is "shorted/error"
 
 // Time & Schedule (NTP)
 #define NTP_SERVER "pool.ntp.org"

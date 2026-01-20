@@ -14,13 +14,15 @@ public:
     NetworkManager();
     void setup(MqttCallback callback);
     void loop();
-    void publish(const char* topic, const char* payload);
     bool isConnected();
+    void publish(const char* topic, const char* payload);
 
 private:
     WiFiClient espClient;
     PubSubClient client;
+    
     void reconnect();
+    void setupOTA(); // Internal helper
 };
 
 #endif

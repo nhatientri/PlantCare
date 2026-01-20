@@ -23,11 +23,19 @@ float SensorManager::readHumidity() {
 bool SensorManager::readSoilMoisture(PlantData* plants, int numPlants, bool& outNeedsWatering) {
     outNeedsWatering = false;
     
+    bool validReading = true;
     for(int i=0; i<numPlants; i++) {
-        // Validation index check
-        // In this loop we assume arrays are correctly sized by main program using NUM_PLANTS
-        
         int raw = analogRead(MOISTURE_PINS[i]);
+        
+        // Sanity Check
+        if (raw < SENSOR_MIN_VALID || raw > SENSOR_MAX_VALID) {
+            Serial.printf("Error: Plant %d sensor reading %d is invalid/disconnected!\n", i, raw);
+            validReading = false;
+            // We set moisture to 100% (Wet) to prevent accidental watering
+            plants[i].moisturePercent = 100; 
+            continue; 
+        }
+
         int percent = map(raw, MOISTURE_AIR, MOISTURE_WATER, 0, 100);
         percent = constrain(percent, 0, 100);
         
@@ -40,5 +48,5 @@ bool SensorManager::readSoilMoisture(PlantData* plants, int numPlants, bool& out
             outNeedsWatering = true;
         }
     }
-    return true;
+    return validReading;
 }

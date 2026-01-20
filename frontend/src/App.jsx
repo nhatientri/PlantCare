@@ -5,6 +5,7 @@ import { HistoryChart } from './components/HistoryChart';
 import { Login } from './components/Login';
 import { Register } from './components/Register';
 import { useAuth } from './context/AuthContext';
+import { io } from 'socket.io-client';
 
 function App() {
   const { token, logout, isAuthenticated } = useAuth();
@@ -20,6 +21,9 @@ function App() {
 
   // Use Environment Variable for API URL (Vite style)
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+  // Socket State
+  const [socket, setSocket] = useState(null);
 
   const fetchData = async () => {
     if (!token) return;
@@ -112,13 +116,46 @@ function App() {
     }
   };
 
+  // Initial Fetch & Socket Setup
   useEffect(() => {
     if (isAuthenticated) {
       fetchData();
-      const interval = setInterval(fetchData, 5000);
-      return () => clearInterval(interval);
+
+      // Initialize Socket
+      const newSocket = io(API_URL);
+      setSocket(newSocket);
+
+      newSocket.on('connect', () => {
+        console.log("Socket Connected:", newSocket.id);
+      });
+
+      newSocket.on('new_reading', (reading) => {
+        console.log("New Reading Socket:", reading);
+
+        // Update Grouped Data (Latest State)
+        setGroupedData(prev => ({
+          ...prev,
+          [reading.device_id]: reading
+        }));
+
+        // Update Readings (Charts)
+        setReadings(prev => [...prev, reading]);
+      });
+
+      // Cleanup
+      return () => {
+        newSocket.disconnect();
+      };
     }
   }, [isAuthenticated, token]);
+
+  // Fallback Polling (Reduced frequency to 30s just in case socket fails)
+  useEffect(() => {
+    if (isAuthenticated) {
+      const interval = setInterval(fetchData, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated]);
 
   // Auth Flow Views
   if (!isAuthenticated) {
@@ -152,9 +189,14 @@ function App() {
             <p style={{ color: 'var(--text-muted)', margin: 0 }}>Multi-Device System</p>
           </div>
         </div>
-        <button onClick={logout} style={{ background: 'none', border: '1px solid #334155', color: '#94a3b8', padding: '0.5rem 1rem', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <LogOut size={16} /> Logout
-        </button>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <div style={{ fontSize: '0.8rem', color: socket?.connected ? '#10b981' : '#ef4444' }}>
+            {socket?.connected ? '⚡ Real-Time' : '⚠ Connecting...'}
+          </div>
+          <button onClick={logout} style={{ background: 'none', border: '1px solid #334155', color: '#94a3b8', padding: '0.5rem 1rem', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <LogOut size={16} /> Logout
+          </button>
+        </div>
       </header>
 
       {/* Device Claiming Section */}

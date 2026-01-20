@@ -39,7 +39,8 @@ const int MOISTURE_PINS[] = {34, 35};
 // Calibration
 #define MOISTURE_AIR 2600
 #define MOISTURE_WATER 1000
-#define MOISTURE_THRESHOLD 30 // Threshold for ANY plant to trigger pump
+#define DEFAULT_MOISTURE_THRESHOLD 30 
+extern int wateringThreshold; // Dynamic Variable
 
 // Loop Timing
 #define READ_INTERVAL 5000 // 5 seconds
@@ -53,6 +54,12 @@ const int MOISTURE_PINS[] = {34, 35};
 // Sensor Safety
 #define SENSOR_MIN_VALID 100  // Anything below this is "disconnected"
 #define SENSOR_MAX_VALID 4000 // Anything above this is "shorted/error"
+
+// Advanced Watering Logic
+#define SAFE_MAX_MOISTURE 85  // If any plant is > 85%, DO NOT water (Safety)
+#define TANK_CHECK_TOLERANCE 2 // Moisture must increase by > 2% to prove water flowed
+#define MOISTURE_RECOVERY_RISE 5 // Increase > 5% clears "Tank Empty" alert
+#define MAX_TANK_FAILURES 2    // 2 failed attempts = Tank Empty
 
 // Time & Schedule (NTP)
 #define NTP_SERVER "pool.ntp.org"

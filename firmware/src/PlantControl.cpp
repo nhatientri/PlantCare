@@ -16,16 +16,16 @@ void PlantControl::syncTime() {
     // but we can add manual sync checks here if needed.
 }
 
-bool PlantControl::isDaytime() {
+bool PlantControl::isWateringWindow() {
     struct tm timeinfo;
     if (!getLocalTime(&timeinfo)) {
-        Serial.println("Time sync failed, assuming safe mode (Daytime=TRUE)");
+        Serial.println("Time sync failed, assuming safe mode (Window=TRUE)");
         return true; 
     }
     
-    Serial.printf("Time: %02d:%02d\n", timeinfo.tm_hour, timeinfo.tm_min);
-    
-    if (timeinfo.tm_hour >= START_HOUR && timeinfo.tm_hour < END_HOUR) {
+    int h = timeinfo.tm_hour;
+    // Morning: 6-9, Evening: 17-20
+    if ((h >= 6 && h < 9) || (h >= 17 && h < 20)) {
         return true;
     }
     return false;
@@ -38,7 +38,7 @@ int PlantControl::getDayOfYear() {
     return timeinfo.tm_yday;
 }
 
-bool PlantControl::processAutoWatering(bool moistureNeedsWatering) {
+bool PlantControl::processAutoWatering(bool moistureNeedsWatering, int currentAvgMoisture, bool isSafeToWater) {
     unsigned long now = millis();
     
     // Daily Limit Reset
@@ -49,17 +49,39 @@ bool PlantControl::processAutoWatering(bool moistureNeedsWatering) {
         Serial.println("New Day: Resetting daily watering count.");
     }
 
+    // Auto-Recovery Check (Always runs): 
+    // If water level ROSE significantly manually or by luck, clear error
+    if (isTankEmpty) {
+       // We can't really check "Session Start" here easily if we aren't in a session.
+       // But if we see moisture is GOOD (not needing water), maybe we clear it?
+       // OR: The user requested comparison. Let's do it inside the SOAK check.
+    }
+
     // State Machine
     switch (currentState) {
         case IDLE:
             if (moistureNeedsWatering) {
-                if (!isDaytime()) {
-                    Serial.println("Need water, but it's NIGHT. Skipping.");
+                // 1. Safety Check: Too Wet?
+                if (!isSafeToWater) {
+                    Serial.println("Safety Block: One or more plants are TOO WET. Skipping.");
                     return false;
                 }
+
+                // 2. Safety Check: Tank Empty?
+                if (isTankEmpty) {
+                    Serial.println("Alert: TANK EMPTY. Auto-watering blocked.");
+                    return false;
+                }
+
+                // 3. Time Window Check
+                if (!isWateringWindow()) {
+                     Serial.println("Need water, but outside Optimal Hours. Skipping.");
+                     return false;
+                }
                 
+                // 4. Daily Limit Check
                 if (dailyWateringCount >= MAX_DAILY_CYCLES) {
-                     Serial.println("Need water, but DAILY LIMIT reached. Skipping to prevent flooding.");
+                     Serial.println("Need water, but DAILY LIMIT reached. Skipping.");
                      return false;
                 }
 
@@ -70,6 +92,9 @@ bool PlantControl::processAutoWatering(bool moistureNeedsWatering) {
                 stateStartTime = now;
                 currentSessionCycles = 1;
                 dailyWateringCount++;
+                
+                // Capture baseline for Tank Check
+                startSessionMoisture = currentAvgMoisture;
                 return true;
             }
             break;
@@ -88,10 +113,36 @@ bool PlantControl::processAutoWatering(bool moistureNeedsWatering) {
         case SOAKING:
             // Pump is OFF. Waiting for water to soak in.
             if (now - stateStartTime >= PUMP_SOAK_MS) {
-                // Soak finished. Check if we need more water.
-                if (moistureNeedsWatering) {
+                // Soak finished. 
+                
+                // --- Tank Empty / Recovery Logic ---
+                int rise = currentAvgMoisture - startSessionMoisture;
+                Serial.printf("Soak Complete. Moisture Rise: %d%%\n", rise);
+                
+                if (rise >= MOISTURE_RECOVERY_RISE) {
+                    if (isTankEmpty) {
+                        Serial.println("Auto-Recovery: Moisture rose! Clearing Tank Empty alert.");
+                        isTankEmpty = false; 
+                        tankFailureCount = 0;
+                    }
+                } else if (rise < TANK_CHECK_TOLERANCE) {
+                    // It didn't go up. Possible empty tank.
+                    tankFailureCount++;
+                    Serial.printf("Warning: Moisture didn't rise. Failure Count: %d\n", tankFailureCount);
+                    if (tankFailureCount >= MAX_TANK_FAILURES) {
+                        isTankEmpty = true;
+                        Serial.println("CRITICAL: Tank Empty detected!");
+                    }
+                } else {
+                    // It went up a little, assume it's working but maybe slow. Reset failure.
+                    tankFailureCount = 0;
+                }
+                // -----------------------------------
+
+                // Check if we still need water
+                if (moistureNeedsWatering && !isTankEmpty) {
                     if (currentSessionCycles < MAX_WATERING_CYCLES) {
-                        Serial.printf("Still dry after soak. Starting Burst %d\n", currentSessionCycles + 1);
+                        Serial.printf("Still dry. Starting Burst %d\n", currentSessionCycles + 1);
                         turnPumpOn();
                         currentState = WATERING;
                         stateStartTime = now;
@@ -103,7 +154,7 @@ bool PlantControl::processAutoWatering(bool moistureNeedsWatering) {
                         return false;
                     }
                 } else {
-                    Serial.println("Moisture OK after soak. Session complete.");
+                    Serial.println("Session complete (Moisture OK or Tank Empty).");
                     currentState = IDLE;
                     return false;
                 }

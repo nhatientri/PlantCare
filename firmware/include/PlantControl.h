@@ -12,10 +12,15 @@ public:
     void syncTime();
     
     // Checks time schedule and moisture request to effectively turn on/off pump
-    bool processAutoWatering(bool moistureNeedsWatering);
+    // Accepts current average moisture to track tank levels
+    bool processAutoWatering(bool moistureNeedsWatering, int currentAvgMoisture, bool isSafeToWater);
     
     void turnPumpOn();
     void turnPumpOff();
+
+    // Accessors for state
+    bool isTankEmptyAlert() { return isTankEmpty; }
+    void resetAlerts() { isTankEmpty = false; tankFailureCount = 0; }
 
 private:
     // Smart Watering State
@@ -33,7 +38,12 @@ private:
     int currentDay = -1;
     int dailyWateringCount = 0;
 
-    bool isDaytime();
+    // Tank Empty Logic
+    bool isTankEmpty = false;
+    int tankFailureCount = 0;
+    int startSessionMoisture = 0; // Snapshot before watering
+
+    bool isWateringWindow(); // Renamed from isDaytime
     int getDayOfYear();
 };
 

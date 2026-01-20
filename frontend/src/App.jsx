@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Droplets, Thermometer, Wind, Sprout, LogOut, PlusCircle } from 'lucide-react';
+import { Droplets, Thermometer, Wind, Sprout, LogOut, PlusCircle, Settings, Save } from 'lucide-react';
 import { SensorCard } from './components/SensorCard';
-import { HistoryChart } from './components/HistoryChart';
 import { Login } from './components/Login';
 import { Register } from './components/Register';
 import { useAuth } from './context/AuthContext';
@@ -9,7 +8,6 @@ import { io } from 'socket.io-client';
 
 function App() {
   const { token, logout, isAuthenticated } = useAuth();
-  const [readings, setReadings] = useState([]);
   const [groupedData, setGroupedData] = useState({});
   const [wateringStates, setWateringStates] = useState({}); // { deviceId: boolean }
   const [showRegister, setShowRegister] = useState(false);
@@ -24,6 +22,9 @@ function App() {
 
   // Socket State
   const [socket, setSocket] = useState(null);
+
+  // UI State for Thresholds
+  const [thresholdInputs, setThresholdInputs] = useState({}); // { deviceId: "30" }
 
   const fetchData = async () => {
     if (!token) return;
@@ -41,11 +42,9 @@ function App() {
       const json = await response.json();
 
       if (json.data && json.data.length > 0) {
-        // Raw chronological data for charts
         const sortedData = json.data.reverse();
-        setReadings(sortedData);
 
-        // Group by Device ID to find the LATEST reading for each device
+        // Group by Device ID
         const groups = {};
         sortedData.forEach(reading => {
           // Because we reversed it (oldest -> newest), 
@@ -53,9 +52,20 @@ function App() {
           groups[reading.device_id] = reading;
         });
         setGroupedData(groups);
+
+        // Initialize inputs if not set
+        const inputState = { ...thresholdInputs };
+        Object.keys(groups).forEach(did => {
+          if (!inputState[did] && groups[did].threshold) {
+            inputState[did] = groups[did].threshold;
+          } else if (!inputState[did]) {
+            inputState[did] = 30; // Default fallback
+          }
+        });
+        setThresholdInputs(inputState);
+
       } else {
         setGroupedData({});
-        setReadings([]);
       }
     } catch (error) {
       console.error("Failed to fetch data:", error);
@@ -75,7 +85,6 @@ function App() {
         body: JSON.stringify({ deviceId, command: 'PUMP_ON' })
       });
 
-      // Reset state after 5 seconds (matching firmware duration)
       setTimeout(() => {
         setWateringStates(prev => ({ ...prev, [deviceId]: false }));
       }, 5000);
@@ -84,6 +93,28 @@ function App() {
       console.error(err);
       alert('Failed to send command');
       setWateringStates(prev => ({ ...prev, [deviceId]: false }));
+    }
+  };
+
+  const handleUpdateThreshold = async (deviceId) => {
+    const val = parseInt(thresholdInputs[deviceId]);
+    if (isNaN(val) || val < 0 || val > 100) {
+      alert("Please enter a valid percentage (0-100)");
+      return;
+    }
+
+    try {
+      await fetch(`${API_URL}/api/commands`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ deviceId, command: `SET_THRESHOLD:${val}` })
+      });
+      alert(`Threshold updated to ${val}%. Device will update internally.`);
+    } catch (e) {
+      alert("Failed to update threshold");
     }
   };
 
@@ -138,8 +169,14 @@ function App() {
           [reading.device_id]: reading
         }));
 
-        // Update Readings (Charts)
-        setReadings(prev => [...prev, reading]);
+        // Update input if we receive a confirmed threshold from device (optional sync)
+        if (reading.threshold) {
+          setThresholdInputs(prev => {
+            // Only update if user hasn't typed? Or just sync it?
+            // Let's sync it if it exists to keep UI consistent with reality
+            return { ...prev, [reading.device_id]: reading.threshold };
+          });
+        }
       });
 
       // Cleanup
@@ -240,52 +277,66 @@ function App() {
 
           <div key={deviceId} style={{ marginBottom: '3rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>
-              <h2 style={{ textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.9rem', color: '#94a3b8', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
-                Device: <span style={{ color: 'white' }}>{deviceId}</span>
-                {(() => {
-                  // Check Online Status
-                  // SQLite returns "YYYY-MM-DD HH:MM:SS" (UTC)
-                  // We must append 'Z' to force JS to parse it as UTC
-                  const rawTime = latestreading.timestamp;
-                  const timeStr = rawTime.endsWith('Z') ? rawTime : rawTime + 'Z';
-                  const lastSeen = new Date(timeStr).getTime();
-                  const now = new Date().getTime();
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <h2 style={{ textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.9rem', color: '#94a3b8', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  Device: <span style={{ color: 'white' }}>{deviceId}</span>
+                  {latestreading.pump_state === 1 && <span style={{ marginLeft: '10px', color: '#f59e0b', fontSize: '0.8rem' }}>⚡ PUMP ON</span>}
+                </h2>
+                <div style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {/* Online Status Logic */}
+                  {(() => {
+                    const rawTime = latestreading.timestamp;
+                    const timeStr = rawTime.endsWith('Z') ? rawTime : rawTime + 'Z';
+                    const lastSeen = new Date(timeStr).getTime();
+                    const now = new Date().getTime();
+                    const isOnline = (now - lastSeen) < 45000;
+                    return (
+                      <span style={{ fontSize: '0.7rem', color: isOnline ? '#10b981' : '#94a3b8' }}>
+                        {isOnline ? '● Online' : '○ Offline'}
+                      </span>
+                    );
+                  })()}
+                  {/* IP Address Logic if available in future payload */}
+                </div>
+              </div>
 
-                  const diff = now - lastSeen;
-                  // console.log(`Dev ${deviceId}: lastSeen=${timeStr}, diff=${diff}`);
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                {/* SETTINGS AREA */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#0f172a', padding: '0.3rem 0.8rem', borderRadius: '8px', border: '1px solid #334155' }}>
+                  <Settings size={16} color="#94a3b8" />
+                  <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Water at:</span>
+                  <input
+                    type="number"
+                    min="0" max="100"
+                    value={thresholdInputs[deviceId] || 30}
+                    onChange={(e) => setThresholdInputs(prev => ({ ...prev, [deviceId]: e.target.value }))}
+                    style={{ width: '50px', background: 'transparent', border: 'none', borderBottom: '1px solid #94a3b8', color: 'white', textAlign: 'center' }}
+                  />
+                  <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>%</span>
+                  <button
+                    onClick={() => handleUpdateThreshold(deviceId)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+                    title="Save Threshold"
+                  >
+                    <Save size={16} color="#10b981" />
+                  </button>
+                </div>
 
-                  const isOnline = diff < 45000; // 45 seconds tolerance
-
-                  return (
-                    <span style={{
-                      fontSize: '0.7rem',
-                      padding: '2px 8px',
-                      borderRadius: '12px',
-                      backgroundColor: isOnline ? '#10b98120' : '#334155',
-                      color: isOnline ? '#10b981' : '#94a3b8',
-                      border: `1px solid ${isOnline ? '#10b98140' : '#475569'}`
-                    }}>
-                      {isOnline ? '● Online' : '○ Offline'}
-                    </span>
-                  );
-                })()}
-
-                {latestreading.pump_state === 1 && <span style={{ marginLeft: '10px', color: '#f59e0b', fontSize: '0.8rem' }}>⚡ PUMP ON</span>}
-              </h2>
-              <button
-                className="btn-primary"
-                style={{
-                  fontSize: '0.8rem',
-                  padding: '0.4rem 0.8rem',
-                  backgroundColor: wateringStates[deviceId] ? '#f59e0b' : '',
-                  cursor: wateringStates[deviceId] ? 'not-allowed' : 'pointer',
-                  opacity: wateringStates[deviceId] ? 0.8 : 1
-                }}
-                onClick={() => handleWaterNow(deviceId)}
-                disabled={wateringStates[deviceId]}
-              >
-                {wateringStates[deviceId] ? '⏳ Watering...' : '💧 Water Now'}
-              </button>
+                <button
+                  className="btn-primary"
+                  style={{
+                    fontSize: '0.8rem',
+                    padding: '0.4rem 0.8rem',
+                    backgroundColor: wateringStates[deviceId] ? '#f59e0b' : '',
+                    cursor: wateringStates[deviceId] ? 'not-allowed' : 'pointer',
+                    opacity: wateringStates[deviceId] ? 0.8 : 1
+                  }}
+                  onClick={() => handleWaterNow(deviceId)}
+                  disabled={wateringStates[deviceId]}
+                >
+                  {wateringStates[deviceId] ? '⏳ Watering...' : '💧 Water Now'}
+                </button>
+              </div>
             </div>
 
             <div style={{
@@ -325,8 +376,6 @@ function App() {
           </div>
         );
       })}
-
-      {isAuthenticated && readings.length > 0 && <HistoryChart data={readings} />}
     </div>
   );
 }

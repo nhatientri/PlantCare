@@ -18,8 +18,15 @@ public:
     float readTemperature();
     float readHumidity();
     
-    // Fills the provided array with moisture data and returns true if ANY plant needs watering
-    bool readSoilMoisture(PlantData* plants, int numPlants, bool& outNeedsWatering);
+    // Fills the provided array with moisture data and returns true if valid
+    // Updates outNeedsWatering based on the passed threshold
+    bool readSoilMoisture(PlantData* plants, int numPlants, int threshold, bool& outNeedsWatering);
+
+    // Checks if ANY plant is dangerously wet (returns true if > SAFE_MAX_MOISTURE)
+    bool isAnyPlantWet(int safeThreshold);
+    
+    // Helper to get average moisture (used for Tank Empty check base value)
+    int getAllPlantMoistureAverage();
 
 private:
     DHT dht;

@@ -108,13 +108,40 @@ void callback(char* topic, byte* payload, unsigned int length) {
           wateringThreshold = newThreshold;
           preferences.putInt("threshold", wateringThreshold);
           Serial.printf("Updated Threshold to %d%%\n", wateringThreshold);
+          
+          // Send confirmation response
+          String response = "{\"deviceId\":\"" + String(DEVICE_ID) + "\",\"threshold\":" + String(wateringThreshold) + ",\"status\":\"success\"}";
+          client.publish((String("plantcare/") + String(DEVICE_ID) + "/response").c_str(), response.c_str());
+          
+          // Also immediately publish updated status to data topic
+          JsonDocument statusDoc;
+          statusDoc["deviceId"] = DEVICE_ID;
+          statusDoc["threshold"] = wateringThreshold;
+          statusDoc["updateType"] = "threshold";
+          String statusPayload;
+          serializeJson(statusDoc, statusPayload);
+          client.publish(MQTT_TOPIC_DATA, statusPayload.c_str());
       } else {
           Serial.println("Invalid Threshold Value");
+          String response = "{\"deviceId\":\"" + String(DEVICE_ID) + "\",\"error\":\"Invalid threshold value\",\"status\":\"failed\"}";
+          client.publish((String("plantcare/") + String(DEVICE_ID) + "/response").c_str(), response.c_str());
       }
   }
   else if (message == "RESET_ALERTS") {
        Serial.println("MQTT CMD: RESET_ALERTS");
        controller.resetAlerts();
+  }
+  else if (message == "GET_THRESHOLD") {
+       Serial.printf("MQTT CMD: GET_THRESHOLD - Current threshold: %d%%\n", wateringThreshold);
+       // Optionally publish back via MQTT
+       String response = "{\"deviceId\":\"" + String(DEVICE_ID) + "\",\"threshold\":" + String(wateringThreshold) + "}";
+       client.publish((String("plantcare/") + String(DEVICE_ID) + "/response").c_str(), response.c_str());
+  }
+  else if (message == "CLEAR_PREFS") {
+       Serial.println("MQTT CMD: CLEAR_PREFS - Resetting to defaults");
+       preferences.clear();
+       wateringThreshold = DEFAULT_MOISTURE_THRESHOLD;
+       Serial.printf("Threshold reset to default: %d%%\n", wateringThreshold);
   }
 }
 
@@ -125,16 +152,29 @@ void reconnect() {
     // Create a random client ID
     String clientId = DEVICE_ID;
     clientId += String(random(0xffff), HEX);
-    // Attempt to connect
+    
+    // Prepare Last Will and Testament (LWT) message
+    String statusTopic = String(MQTT_TOPIC_STATUS) + "/" + String(DEVICE_ID);
+    String willMessage = "{\"deviceId\":\"" + String(DEVICE_ID) + "\",\"status\":\"offline\"}";
+    
+    // Attempt to connect with LWT
     bool connected = false;
     if (String(MQTT_USER) == "") {
-      connected = client.connect(clientId.c_str());
+      // Connect with LWT: topic, QoS, retain, message
+      connected = client.connect(clientId.c_str(), statusTopic.c_str(), 1, true, willMessage.c_str());
     } else {
-      connected = client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS); 
+      // Connect with username/password and LWT
+      connected = client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS,
+                               statusTopic.c_str(), 1, true, willMessage.c_str()); 
     }
 
     if (connected) {
       Serial.println("connected");
+      
+      // Publish online status immediately after connecting
+      String onlineMessage = "{\"deviceId\":\"" + String(DEVICE_ID) + "\",\"status\":\"online\"}";
+      client.publish(statusTopic.c_str(), onlineMessage.c_str(), true);
+      
       // Resubscribe
       String topic = "plantcare/" + String(DEVICE_ID) + "/command";
       client.subscribe(topic.c_str());
@@ -268,5 +308,18 @@ void loop() {
       Serial.println(httpResponseCode);
     }
     http.end();
+    
+    // Publish to MQTT
+    if (client.connected()) {
+      String mqttPayload;
+      serializeJson(doc, mqttPayload);
+      if (client.publish(MQTT_TOPIC_DATA, mqttPayload.c_str())) {
+        Serial.println("MQTT: Data published successfully");
+      } else {
+        Serial.println("MQTT: Publish failed");
+      }
+    } else {
+      Serial.println("MQTT: Not connected, skipping publish");
+    }
   }
 }

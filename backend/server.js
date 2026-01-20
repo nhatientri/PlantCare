@@ -42,11 +42,16 @@ app.use('/api/auth', authRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/readings', readingRoutes);
 app.use('/api/commands', commandRoutes);
+app.use('/api/ai', require('./routes/ai'));
 
 // Root endpoint
 app.get('/', (req, res) => {
     res.send('PlantCare API is Running! 🌿');
 });
+
+// Initialize AI Service
+const aiService = require('./services/aiService');
+aiService.init();
 
 // Start server
 server.listen(PORT, () => {

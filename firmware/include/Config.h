@@ -16,6 +16,7 @@
 #define MQTT_PASS ""
 #define MQTT_TOPIC_COMMAND "plantcare/+/command" // + is wildcard for device_id
 #define MQTT_TOPIC_DATA "plantcare/readings"
+#define MQTT_TOPIC_STATUS "plantcare/status"  // Status topic for device availability
 
 #ifndef DEVICE_ID
 #define DEVICE_ID "esp32-default" // Fallback

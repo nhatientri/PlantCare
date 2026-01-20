@@ -90,15 +90,28 @@ void NetworkManager::reconnect() {
         String clientId = DEVICE_ID;
         clientId += String(random(0xffff), HEX);
 
+        // Prepare Last Will and Testament (LWT) message
+        String statusTopic = String(MQTT_TOPIC_STATUS) + "/" + String(DEVICE_ID);
+        String willMessage = "{\"deviceId\":\"" + String(DEVICE_ID) + "\",\"status\":\"offline\"}";
+
         bool connected = false;
         if (String(MQTT_USER) == "") {
-            connected = client.connect(clientId.c_str());
+            // Connect with LWT: topic, QoS, retain, message
+            connected = client.connect(clientId.c_str(), statusTopic.c_str(), 1, true, willMessage.c_str());
         } else {
-            connected = client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS);
+            // Connect with username/password and LWT
+            connected = client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS, 
+                                     statusTopic.c_str(), 1, true, willMessage.c_str());
         }
 
         if (connected) {
             Serial.println("connected");
+            
+            // Publish online status immediately after connecting
+            String onlineMessage = "{\"deviceId\":\"" + String(DEVICE_ID) + "\",\"status\":\"online\"}";
+            client.publish(statusTopic.c_str(), onlineMessage.c_str(), true);
+            
+            // Subscribe to command topics
             String topic = "plantcare/" + String(DEVICE_ID) + "/command";
             client.subscribe(topic.c_str());
             client.subscribe(MQTT_TOPIC_COMMAND); 

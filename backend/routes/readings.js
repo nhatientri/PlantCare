@@ -39,7 +39,10 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 // POST Readings (From ESP32)
-router.post('/', (req, res) => {
+const aiService = require('../services/aiService');
+
+// POST Readings (From ESP32)
+router.post('/', async (req, res) => {
     const { deviceId, temperature, humidity, pumpState, plants } = req.body;
 
     if (!deviceId) return res.status(400).json({ error: "Missing deviceId" });
@@ -49,6 +52,21 @@ router.post('/', (req, res) => {
     if (pendingCommand) {
         console.log(`Sending command '${pendingCommand}' to ${deviceId}`);
     }
+
+    // --- AI ANALYSIS ---
+    // 1. Detect Anomaly
+    const healthData = aiService.detectAnomaly([{
+        pump_state: pumpState ? 1 : 0,
+        moisture: plants && plants[0] ? plants[0].moisture : 0, // Using 1st plant for simple anomaly check
+        timestamp: new Date()
+    }]);
+
+    // 2. Predict Dry Time (for first plant as demo)
+    let predictedHours = null;
+    if (plants && plants[0]) {
+        predictedHours = await aiService.predictTimeUntilDry(plants[0].moisture, 30, temperature, humidity);
+    }
+    // -------------------
 
     const sql = 'INSERT INTO readings (device_id, temperature, humidity, pump_state) VALUES (?,?,?,?)';
     const params = [deviceId, temperature, humidity, pumpState ? 1 : 0];
@@ -66,12 +84,13 @@ router.post('/', (req, res) => {
                 temperature: temperature,
                 humidity: humidity,
                 pump_state: pumpState ? 1 : 0,
-                timestamp: new Date().toISOString(), // Approximation until DB timestamp is fetched
-                plants: plants
+                timestamp: new Date().toISOString(),
+                plants: plants,
+                // AI Data
+                health_score: healthData.score,
+                predicted_hours: predictedHours
             });
-            console.log(`Socket.io: Emitted new_reading for ${deviceId}`);
-        } else {
-            console.log("Socket.io instance not found on app");
+            console.log(`Socket.io: Emitted new_reading for ${deviceId} with AI score ${healthData.score}`);
         }
 
         if (plants && Array.isArray(plants) && plants.length > 0) {
@@ -89,7 +108,7 @@ router.post('/', (req, res) => {
 
         res.json({
             "message": "success",
-            "data": req.body,
+            "data": { ...req.body, health_score: healthData.score, predicted_hours: predictedHours },
             "id": readingId,
             "command": pendingCommand
         });

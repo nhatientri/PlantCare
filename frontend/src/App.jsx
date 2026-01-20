@@ -345,6 +345,34 @@ function App() {
               gap: '1.5rem',
               marginBottom: '1.5rem'
             }}>
+              {/* AI Insights Card */}
+              <div style={{ backgroundColor: '#1e293b', padding: '1.5rem', borderRadius: '12px', border: '1px solid #6366f1', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: '#6366f1' }}></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1rem' }}>
+                  <div style={{ backgroundColor: 'rgba(99, 102, 241, 0.2)', padding: '8px', borderRadius: '8px' }}>
+                    <Sprout size={24} color="#818cf8" />
+                  </div>
+                  <h3 style={{ margin: 0, fontSize: '1rem', color: '#e2e8f0' }}>AI Insights</h3>
+                </div>
+
+                <div style={{ marginBottom: '1rem' }}>
+                  <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '4px' }}>System Health Score</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                    <span style={{ fontSize: '1.8rem', fontWeight: 'bold', color: latestreading.health_score < 70 ? '#ef4444' : '#10b981' }}>
+                      {latestreading.health_score || 100}
+                    </span>
+                    <span style={{ fontSize: '0.8rem', color: '#64748b' }}>/ 100</span>
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '4px' }}>Time to Water</div>
+                  <div style={{ fontSize: '1.2rem', color: 'white' }}>
+                    {latestreading.predicted_hours ? `~ ${latestreading.predicted_hours} hrs` : 'Calculating...'}
+                  </div>
+                </div>
+              </div>
+
               {/* Environment Sensors */}
               <SensorCard
                 title="Temperature"

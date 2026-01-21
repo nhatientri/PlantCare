@@ -7,26 +7,30 @@
 
 // Backend Server
 // Backend Server
+#include "Secrets.h"
+
+// Backend Server
 #define SERVER_URL "https://plantcare-tk1w.onrender.com/api/readings"
 
 // MQTT Configuration
-#define MQTT_SERVER "broker.emqx.io"
-#define MQTT_PORT 1883
-#define MQTT_USER "" // Empty for public broker
-#define MQTT_PASS ""
-#define MQTT_TOPIC_COMMAND "plantcare/+/command" // + is wildcard for device_id
+#define MQTT_SERVER MQTT_SERVER_SECURE
+#define MQTT_PORT MQTT_PORT_SECURE
+#define MQTT_USER MQTT_USER_SECURE
+#define MQTT_PASS MQTT_PASS_SECURE
+#define MQTT_TOPIC_COMMAND "plantcare/+/command"
 #define MQTT_TOPIC_DATA "plantcare/readings"
-#define MQTT_TOPIC_STATUS "plantcare/status"  // Status topic for device availability
+#define MQTT_TOPIC_STATUS "plantcare/status"
 
 #ifndef DEVICE_ID
-#define DEVICE_ID "esp32-default" // Fallback
+#define DEVICE_ID "esp32-default"
 #endif
 
-#define DEVICE_SECRET "change_me_to_random_string" // Security Secret
+#define DEVICE_SECRET DEVICE_SECRET_KEY
 
 // OTA Updates
+// OTA Updates
 #define OTA_HOSTNAME "PlantCare-" DEVICE_ID
-#define OTA_PASSWORD "admin" // Optional security measure
+#define OTA_PASSWORD OTA_PASSWORD_SECURE
 
 // Pin Definitions
 #define DHT_PIN 4

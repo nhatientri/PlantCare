@@ -82,10 +82,14 @@ bool NetworkManager::isConnected() {
 }
 
 void NetworkManager::reconnect() {
-    // Loop until we're reconnected
-    // Note: This is blocking, consistent with original logic for simplicity,
-    // but ideally should be non-blocking in future iterations.
-    while (!client.connected()) {
+    // Non-blocking Reconnect
+    unsigned long now = millis();
+    if (now - lastReconnectAttempt < 5000) {
+        return; // Wait 5 seconds before retrying
+    }
+    lastReconnectAttempt = now;
+
+    if (!client.connected()) {
         Serial.print("Attempting MQTT connection...");
         String clientId = DEVICE_ID;
         clientId += String(random(0xffff), HEX);
@@ -119,7 +123,7 @@ void NetworkManager::reconnect() {
             Serial.print("failed, rc=");
             Serial.print(client.state());
             Serial.println(" try again in 5 seconds");
-            delay(5000); 
+            // Do NOT delay here. Just return and let loop continue.
         }
     }
 }

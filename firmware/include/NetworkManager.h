@@ -23,6 +23,8 @@ private:
     
     void reconnect();
     void setupOTA(); // Internal helper
+
+    unsigned long lastReconnectAttempt = 0;
 };
 
 #endif

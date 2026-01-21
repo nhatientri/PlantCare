@@ -50,6 +50,7 @@ void loop() {
   lastReadTime = now;
 
   // --- 1. Read Sensors ---
+  sensors.update(); // Update cache
   float temperature = sensors.readTemperature();
   float humidity = sensors.readHumidity();
 

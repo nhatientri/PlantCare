@@ -191,4 +191,10 @@ void PlantControl::startManualWatering() {
     stateStartTime = millis();
 }
 
+void PlantControl::turnPumpOff() {
+    digitalWrite(PUMP_PIN, LOW);
+    currentState = IDLE;
+    Serial.println("Pump Force Stopped via helper.");
+}
+
 

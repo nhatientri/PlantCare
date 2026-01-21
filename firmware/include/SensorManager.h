@@ -13,8 +13,10 @@ struct PlantData {
 class SensorManager {
 public:
     SensorManager();
-    void setup();
-    
+    // Updates all sensor readings (Call once per loop)
+    void update();
+
+    // Uses CACHED values from update()
     float readTemperature();
     float readHumidity();
     
@@ -30,6 +32,13 @@ public:
 
 private:
     DHT dht;
+    
+    // Caching
+    unsigned long lastUpdateTime = 0;
+    float cachedTemp = 0;
+    float cachedHumidity = 0;
+    int cachedMoisture[10]; // Support up to 10 plants
+    bool cachedMoistureValid[10];
 };
 
 #endif

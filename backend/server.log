@@ -1,38 +1,38 @@
-Initializing AI Service...
-Server running on port 3001
 Connected to PostgreSQL database.
 Database tables initialized successfully.
+Initializing AI Service...
 Epoch 1 / 10
-(node:71890) [DEP0051] DeprecationWarning: The `util.isNullOrUndefined` API is deprecated. Please use `arg === null || arg === undefined` instead.
+(node:24952) [DEP0051] DeprecationWarning: The `util.isNullOrUndefined` API is deprecated. Please use `arg === null || arg === undefined` instead.
 (Use `node --trace-deprecation ...` to show where the warning was created)
 
-24ms 5952us/step - loss=2588.63 
+23ms 5789us/step - loss=578.03 
 Epoch 2 / 10
 
-2ms 463us/step - loss=5262210.00 
+2ms 450us/step - loss=1185557.50 
 Epoch 3 / 10
 
-2ms 511us/step - loss=10792968192.00 
+2ms 435us/step - loss=2431627776.00 
 Epoch 4 / 10
 
-1ms 357us/step - loss=22136829771776.00 
+1ms 356us/step - loss=4987369816064.00 
 Epoch 5 / 10
 
-2ms 415us/step - loss=45403559574896640.00 
+2ms 416us/step - loss=10229302134046720.00 
 Epoch 6 / 10
 
-1ms 263us/step - loss=93124588669836984320.00 
+1ms 357us/step - loss=20980722551547232256.00 
 Epoch 7 / 10
 
-1ms 267us/step - loss=1.9100241599798924e+23 
+1ms 301us/step - loss=4.303233579228857e+22 
 Epoch 8 / 10
 
-1ms 265us/step - loss=3.917540204022038e+26 
+1ms 288us/step - loss=8.826112179855404e+25 
 Epoch 9 / 10
 
-2ms 451us/step - loss=8.035037057368073e+29 
+2ms 462us/step - loss=1.8102723453325684e+29 
 Epoch 10 / 10
 
-4ms 938us/step - loss=1.6480194377290357e+33 
+4ms 955us/step - loss=3.7129442752783464e+32 
 AI Model Initialized.
+Server running on port 3001
 Connected to MQTT Broker

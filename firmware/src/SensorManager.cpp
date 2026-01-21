@@ -22,6 +22,7 @@ void SensorManager::update() {
     // 2. Read Soil Sensors
     for(int i=0; i<NUM_PLANTS && i<10; i++) {
         int raw = analogRead(MOISTURE_PINS[i]);
+        Serial.printf("Plant %d (pin %d) raw ADC: %d\n", i, MOISTURE_PINS[i], raw);
         
         if (raw < SENSOR_MIN_VALID || raw > SENSOR_MAX_VALID) {
             Serial.printf("Error: Plant %d sensor reading %d is invalid/disconnected!\n", i, raw);

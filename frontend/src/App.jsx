@@ -445,11 +445,21 @@ function App() {
               {/* AI Insights Card */}
               <div style={{ backgroundColor: '#1e293b', padding: '1.5rem', borderRadius: '12px', border: '1px solid #6366f1', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: '#6366f1' }}></div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1rem' }}>
-                  <div style={{ backgroundColor: 'rgba(99, 102, 241, 0.2)', padding: '8px', borderRadius: '8px' }}>
-                    <Sprout size={24} color="#818cf8" />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ backgroundColor: 'rgba(99, 102, 241, 0.2)', padding: '8px', borderRadius: '8px' }}>
+                      <Sprout size={24} color="#818cf8" />
+                    </div>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '1rem', color: '#e2e8f0' }}>AI Insights</h3>
+                      {latestreading.ai_status === 'SOAKING' &&
+                        <span style={{ fontSize: '0.7rem', backgroundColor: '#3b82f6', color: 'white', padding: '2px 6px', borderRadius: '4px' }}>SOAKING</span>
+                      }
+                      {latestreading.ai_status === 'MONITORING' &&
+                        <span style={{ fontSize: '0.7rem', backgroundColor: '#10b981', color: 'white', padding: '2px 6px', borderRadius: '4px' }}>MONITORING</span>
+                      }
+                    </div>
                   </div>
-                  <h3 style={{ margin: 0, fontSize: '1rem', color: '#e2e8f0' }}>AI Insights</h3>
                 </div>
 
                 <div style={{ marginBottom: '1rem' }}>
@@ -470,61 +480,57 @@ function App() {
                 </div>
 
                 <div style={{ marginTop: '1rem', borderTop: '1px solid #334155', paddingTop: '1rem' }}>
-                  <button
-                    onClick={() => handleResetSystem(deviceId)}
-                    style={{
-                      width: '100%',
-                      padding: '0.6rem',
-                      backgroundColor: latestreading.health_score < 60 ? '#ef4444' : '#334155',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    <Settings size={16} />
-                    {latestreading.health_score < 60 ? 'UNLOCK SYSTEM' : 'Reset System'}
-                  </button>
-                </div>
+                  <Settings size={16} />
+                  {latestreading.health_score < 60 ? 'UNLOCK SYSTEM' : 'Reset System'}
+                </button>
+
+                {/* Anomalies List */}
+                {latestreading.anomalies && latestreading.anomalies.length > 0 && (
+                  <div style={{ marginTop: '1rem', maxHeight: '100px', overflowY: 'auto' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Recent Issues:</div>
+                    {latestreading.anomalies.map((a, i) => (
+                      <div key={i} style={{ fontSize: '0.75rem', color: '#ef4444', marginBottom: '2px', display: 'flex', gap: '4px' }}>
+                        <span>•</span>
+                        <span>{a.msg}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-
-              {/* Environment Sensors */}
-              <SensorCard
-                title="Temperature"
-                value={latestreading.temperature}
-                unit="°C"
-                icon={Thermometer}
-                color="#ef4444"
-              />
-              <SensorCard
-                title="Humidity"
-                value={latestreading.humidity}
-                unit="%"
-                icon={Wind}
-                color="#06b6d4"
-              />
-
-              {/* Plant Specific Sensors */}
-              {plants.map((plant, idx) => (
-                <SensorCard
-                  key={idx}
-                  title={`Plant ${plant.index + 1} Moisture ${plant.pin ? `(Pin ${plant.pin})` : ''}`}
-                  value={plant.moisture}
-                  unit="%"
-                  icon={Droplets}
-                  color="#3b82f6"
-                />
-              ))}
             </div>
+
+            {/* Environment Sensors */}
+            <SensorCard
+              title="Temperature"
+              value={latestreading.temperature}
+              unit="°C"
+              icon={Thermometer}
+              color="#ef4444"
+            />
+            <SensorCard
+              title="Humidity"
+              value={latestreading.humidity}
+              unit="%"
+              icon={Wind}
+              color="#06b6d4"
+            />
+
+            {/* Plant Specific Sensors */}
+            {plants.map((plant, idx) => (
+              <SensorCard
+                key={idx}
+                title={`Plant ${plant.index + 1} Moisture ${plant.pin ? `(Pin ${plant.pin})` : ''}`}
+                value={plant.moisture}
+                unit="%"
+                icon={Droplets}
+                color="#3b82f6"
+              />
+            ))}
           </div>
-        );
-      })}
-    </div>
+          </div>
+  );
+})}
+    </div >
   );
 
 

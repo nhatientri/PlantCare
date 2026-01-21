@@ -102,6 +102,8 @@ router.post('/', async (req, res) => {
         threshold,
         tankEmpty,
         health_score: healthData.score,
+        ai_status: healthData.status,
+        anomalies: healthData.anomalies,
         predicted_hours: predictedHours
     };
 

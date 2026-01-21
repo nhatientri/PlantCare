@@ -158,7 +158,13 @@ class AIService {
      */
     detectAnomaly(readings) {
         // We only process the LATEST reading
-        if (!readings || readings.length === 0) return { score: this.healthScore, shouldLockout: this.healthScore < 60 };
+        // Debug Log
+        // console.log(`AI Detect: Input Size=${readings ? readings.length : 'null'}`);
+
+        if (!readings || readings.length === 0) {
+            // console.log("AI Detect: No readings provided.");
+            return { score: this.healthScore, shouldLockout: this.healthScore < 60 };
+        }
 
         const latest = readings[readings.length - 1];
         const currentPumpState = latest.pump_state;
@@ -195,12 +201,16 @@ class AIService {
         // We need 'prev' for this, but simplistic check is ok for now or we rely on sensor firmware valid range
         // For simplicity, let's skip single-frame variance check to avoid "missing prev" bug in this stateless payload version
 
-        // Update State
-        this.lastPumpState = currentPumpState;
+        // --- 4. Determine Status ---
+        let status = "MONITORING";
+        if (this.soakStartTime) {
+            status = "SOAKING";
+        }
 
         return {
             score: this.healthScore,
             anomalies: this.recentAnomalies,
+            status: status,
             shouldLockout: this.healthScore < 60
         };
     }

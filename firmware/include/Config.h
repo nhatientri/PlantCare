@@ -38,8 +38,8 @@
 #define PUMP_PIN 2      // Digital Output
 
 // Moisture Sensors (List of Analog Pins only)
-// Example: Two plants on pins 34 and 35
-const int MOISTURE_PINS[] = {34, 35};
+// Example: Two plants on pins 34 and 32
+const int MOISTURE_PINS[] = {34, 32};
 #define NUM_PLANTS (sizeof(MOISTURE_PINS) / sizeof(MOISTURE_PINS[0]))
 
 

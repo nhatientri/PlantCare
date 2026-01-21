@@ -51,9 +51,25 @@ app.get('/', (req, res) => {
 
 // Initialize AI Service
 const aiService = require('./services/aiService');
-aiService.init();
+const db = require('./database');
 
-// Start server
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+// Start Server Function
+const startServer = async () => {
+    try {
+        // 1. Initialize Database
+        await db.init();
+
+        // 2. Initialize AI Service (Dependent on DB)
+        await aiService.init();
+
+        // 3. Start Listening
+        server.listen(PORT, () => {
+            console.log(`Server running on port ${PORT}`);
+        });
+    } catch (error) {
+        console.error("Failed to start server:", error);
+        process.exit(1);
+    }
+};
+
+startServer();

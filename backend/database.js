@@ -76,9 +76,10 @@ const initDb = async () => {
     }
 };
 
-// Auto-run init
-initDb();
+// Auto-run init removed to prevent race conditions
+// initDb();
 
 module.exports = {
     query: (text, params) => pool.query(text, params),
+    init: initDb
 };

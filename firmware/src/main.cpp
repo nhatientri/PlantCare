@@ -85,6 +85,7 @@ void loop() {
   for (int i = 0; i < NUM_PLANTS; i++) {
     JsonObject p = plantsArray.add<JsonObject>();
     p["index"] = plantsData[i].index;
+    p["pin"] = plantsData[i].pin;
     p["moisture"] = plantsData[i].moisturePercent;
   }
 

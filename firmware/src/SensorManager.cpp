@@ -49,6 +49,7 @@ bool SensorManager::readSoilMoisture(PlantData* plants, int numPlants, int thres
     
     for(int i=0; i<numPlants && i<10; i++) {
         plants[i].index = i;
+        plants[i].pin = MOISTURE_PINS[i];
         plants[i].moisturePercent = cachedMoisture[i];
         
         if (!cachedMoistureValid[i]) allValid = false;

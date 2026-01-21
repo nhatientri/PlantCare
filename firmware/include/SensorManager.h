@@ -7,6 +7,7 @@
 
 struct PlantData {
     int index;
+    int pin;
     int moisturePercent;
 };
 

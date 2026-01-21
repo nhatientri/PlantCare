@@ -122,6 +122,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
       // Manual Override (Non-Blocking)
       controller.startManualWatering();
   }
+  else if (message == "LOCK_SYSTEM") {
+      controller.lockSystem();
+      Serial.println("Command: LOCK_SYSTEM executed.");
+  }
   else if (message.startsWith("SET_THRESHOLD:")) {
       int newThreshold = message.substring(14).toInt();
       if (newThreshold >= 0 && newThreshold <= 100) {

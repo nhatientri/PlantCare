@@ -16,10 +16,13 @@ public:
     bool processAutoWatering(bool moistureNeedsWatering, int currentAvgMoisture, bool isSafeToWater);
     
     void startManualWatering();
+    void lockSystem() { isSafetyLocked = true; turnPumpOff(); }
+    void unlockSystem() { isSafetyLocked = false; }
     
     // Accessors for state
     bool isTankEmptyAlert() { return isTankEmpty; }
-    void resetAlerts() { isTankEmpty = false; tankFailureCount = 0; }
+    bool isSystemLocked() { return isSafetyLocked; }
+    void resetAlerts() { isTankEmpty = false; tankFailureCount = 0; isSafetyLocked = false; }
 
 private:
     // Smart Watering State
@@ -40,6 +43,7 @@ private:
 
     // Tank Empty Logic
     bool isTankEmpty = false;
+    bool isSafetyLocked = false;
     int tankFailureCount = 0;
     int startSessionMoisture = 0; // Snapshot before watering
 

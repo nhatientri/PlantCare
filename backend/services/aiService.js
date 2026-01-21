@@ -8,6 +8,7 @@ class AIService {
         // Health Score State
         this.healthScore = 100;
         this.recentAnomalies = [];
+        this.successfulWaterings = []; // History of moisture rise per burst
     }
 
     async init() {
@@ -122,13 +123,23 @@ class AIService {
     }
 
     /**
+     * Track a successful watering session to learn "normal" rise
+     */
+    trackWateringSession(riseAmount) {
+        if (riseAmount > 0) {
+            this.successfulWaterings.push(riseAmount);
+            if (this.successfulWaterings.length > 10) this.successfulWaterings.shift();
+            console.log(`AI: Learned new normal. History: [${this.successfulWaterings}]`);
+        }
+    }
+
+    /**
      * Calculate System Health Score (0-100)
      * Detects anomalies like "Pump running but moisture not rising"
      */
     detectAnomaly(readings) {
         // readings: Array of recent data points
-        // We look at the latest few
-        if (!readings || readings.length < 5) return 100;
+        if (!readings || readings.length < 5) return { score: 100, shouldLockout: false };
 
         let anomalyPenalty = 0;
         const latest = readings[readings.length - 1];
@@ -136,13 +147,34 @@ class AIService {
 
         // 1. Pump Failure Detection (Immediate)
         // If pump was ON in previous reading, and moisture DID NOT increase in latest
-        if (prev.pump_state === 1 && latest.moisture <= prev.moisture) {
-            anomalyPenalty += 30;
-            this._logAnomaly("Pump Anomaly: Pump running but moisture steady/dropping");
+        if (prev.pump_state === 1) {
+            const rise = latest.moisture - prev.moisture;
+
+            // Adaptive Check: If we have history, compare against it
+            if (this.successfulWaterings.length > 3) {
+                const avgRise = this.successfulWaterings.reduce((a, b) => a + b, 0) / this.successfulWaterings.length;
+                const threshold = avgRise * 0.2; // Expect at least 20% of normal rise
+
+                if (rise < threshold) {
+                    anomalyPenalty += 40; // Stricter penalty for deviation from normal
+                    this._logAnomaly(`Pump Anomaly: Rise ${rise}% is below expected ${threshold.toFixed(1)}%`);
+                } else {
+                    // It was a good session, track it!
+                    this.trackWateringSession(rise);
+                }
+            } else {
+                // Fallback: Simple check
+                if (rise <= 0) {
+                    anomalyPenalty += 30;
+                    this._logAnomaly("Pump Anomaly: Pump running but moisture steady/dropping");
+                } else {
+                    this.trackWateringSession(rise);
+                }
+            }
         }
 
         // 2. Sensor Noise Detection (Variance Check)
-        // If sensor jumps wildly (> 10%) in one reading
+        // If sensor jumps wildly (> 20%) in one reading
         if (Math.abs(latest.moisture - prev.moisture) > 20 && prev.pump_state === 0) {
             anomalyPenalty += 10;
             this._logAnomaly("Sensor Noise: Sudden moisture jump without pump");
@@ -150,9 +182,11 @@ class AIService {
 
         // Decay the score
         this.healthScore = Math.max(0, 100 - anomalyPenalty);
+
         return {
             score: this.healthScore,
-            anomalies: this.recentAnomalies
+            anomalies: this.recentAnomalies,
+            shouldLockout: this.healthScore < 60
         };
     }
 

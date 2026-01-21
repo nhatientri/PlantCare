@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const authenticateToken = require('../middleware/auth');
 
-
+const mqttClient = require('../lib/mqttClient');
 // GET Readings
 router.get('/', authenticateToken, (req, res) => {
     const limit = req.query.limit || 50;
@@ -63,6 +63,11 @@ router.post('/', async (req, res) => {
         predictedHours = await aiService.predictTimeUntilDry(plants[0].moisture, 30, temperature, humidity);
     }
     // -------------------
+
+    if (healthData.shouldLockout) {
+        console.log(`CRITICAL: Health Score ${healthData.score} < 60. Sending LOCKOUT command.`);
+        mqttClient.publish(`plantcare/${deviceId}/command`, 'LOCK_SYSTEM');
+    }
 
     const sql = 'INSERT INTO readings (device_id, temperature, humidity, pump_state) VALUES (?,?,?,?)';
     const params = [deviceId, temperature, humidity, pumpState ? 1 : 0];

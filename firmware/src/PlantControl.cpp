@@ -57,10 +57,16 @@ bool PlantControl::processAutoWatering(bool moistureNeedsWatering, int currentAv
        // OR: The user requested comparison. Let's do it inside the SOAK check.
     }
 
-// State Machine
+    // State Machine
     switch (currentState) {
         case IDLE:
             if (moistureNeedsWatering) {
+                 // 0. Safety Lock Check
+                 if (isSafetyLocked) {
+                     Serial.println("Safety Block: SYSTEM LOCKED by AI. Skipping.");
+                     return false;
+                 }
+                 
                 // 1. Safety Check: Too Wet?
                 if (!isSafeToWater) {
                     Serial.println("Safety Block: One or more plants are TOO WET. Skipping.");
@@ -175,6 +181,10 @@ bool PlantControl::processAutoWatering(bool moistureNeedsWatering, int currentAv
 }
 
 void PlantControl::startManualWatering() {
+    if (isSafetyLocked) {
+        Serial.println("Manual Watering BLOCKED: System is Locked!");
+        return;
+    }
     Serial.println("Manual Watering Triggered!");
     digitalWrite(PUMP_PIN, HIGH);
     currentState = MANUAL_WATERING;

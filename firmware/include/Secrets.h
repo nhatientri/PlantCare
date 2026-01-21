@@ -17,7 +17,7 @@
 #define MQTT_PASS_SECURE ""       // Add Password
 
 // Device Security
-#define DEVICE_SECRET_KEY "change_me_to_random_string" 
+#define DEVICE_SECRET_KEY "admin" 
 #define OTA_PASSWORD_SECURE "admin"
 
 #endif

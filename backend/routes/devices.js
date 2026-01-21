@@ -18,9 +18,7 @@ router.post('/claim', authenticateToken, async (req, res) => {
 
         const device = checkRes.rows[0];
 
-        if (device.user_id) {
-            return res.status(400).json({ error: "Device already claimed" });
-        }
+
 
         if (device.secret !== secret) {
             return res.status(403).json({ error: "Invalid Device Secret" });

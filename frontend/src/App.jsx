@@ -54,6 +54,9 @@ function App() {
         const groups = {};
 
         // 1. Initialize all claimed devices first (so they exist even if offline)
+        console.log("Devices API:", devicesData);
+        console.log("Readings API:", readingsData);
+
         devicesData.data.forEach(dev => {
           groups[dev.device_id] = {
             device_id: dev.device_id,

@@ -510,7 +510,7 @@ function App() {
               {plants.map((plant, idx) => (
                 <SensorCard
                   key={idx}
-                  title={`Plant ${plant.index + 1} Moisture (P${plant.pin})`}
+                  title={`Plant ${plant.index + 1} Moisture${plant.pin ? ` (P${plant.pin})` : ''}`}
                   value={plant.moisture}
                   unit="%"
                   icon={Droplets}

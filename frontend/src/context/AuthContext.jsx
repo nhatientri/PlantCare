@@ -9,9 +9,14 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         if (token) {
             localStorage.setItem('plantcare_token', token);
-            // Optional: Decode token to get user info if needed, or fetch from API
-            // const decoded = JSON.parse(atob(token.split('.')[1]));
-            // setUser({ username: decoded.username });
+            try {
+                // Decode token to get user info
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                setUser({ username: payload.username, id: payload.id });
+            } catch (e) {
+                console.error("Failed to decode token", e);
+                setUser(null);
+            }
         } else {
             localStorage.removeItem('plantcare_token');
             setUser(null);
@@ -27,7 +32,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ token, isAuthenticated: !!token, login, logout }}>
+        <AuthContext.Provider value={{ token, isAuthenticated: !!token, user, login, logout }}>
             {children}
         </AuthContext.Provider>
     );

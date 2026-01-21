@@ -7,7 +7,7 @@ import { useAuth } from './context/AuthContext';
 import { io } from 'socket.io-client';
 
 function App() {
-  const { token, logout, isAuthenticated } = useAuth();
+  const { token, logout, isAuthenticated, user } = useAuth();
   const [groupedData, setGroupedData] = useState({});
   const [wateringStates, setWateringStates] = useState({}); // { deviceId: boolean }
   const [showRegister, setShowRegister] = useState(false);
@@ -276,8 +276,12 @@ function App() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <div style={{ fontSize: '0.8rem', color: socket?.connected ? '#10b981' : '#ef4444' }}>
-            {socket?.connected ? '⚡ Real-Time' : '⚠ Connecting...'}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+            <span style={{ color: 'white', fontWeight: 'bold' }}>{user?.username}</span>
+            <div style={{ fontSize: '0.7rem', color: socket?.connected ? '#10b981' : '#ef4444', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: socket?.connected ? '#10b981' : '#ef4444', display: 'inline-block' }}></span>
+              {socket?.connected ? 'Online' : 'Offline'}
+            </div>
           </div>
           <button onClick={logout} style={{ background: 'none', border: '1px solid #334155', color: '#94a3b8', padding: '0.5rem 1rem', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <LogOut size={16} /> Logout

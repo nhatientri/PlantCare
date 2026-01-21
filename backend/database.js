@@ -1,50 +1,84 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { Pool } = require('pg');
 
-const dbPath = path.resolve(__dirname, 'plantcare.db');
+// Use DATABASE_URL from environment, or default to a local dev URL if not set
+// Example: postgres://user:password@localhost:5432/plantcare
+const connectionString = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/plantcare';
 
-const db = new sqlite3.Database(dbPath, (err) => {
-    if (err) {
-        console.error('Error opening database ' + dbPath + ': ' + err.message);
-    } else {
-        console.log('Connected to the SQLite database.');
-
-        db.serialize(() => {
-            // Main readings table (Device level)
-            db.run(`CREATE TABLE IF NOT EXISTS readings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                device_id TEXT,
-                temperature REAL,
-                humidity REAL,
-                pump_state INTEGER,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )`);
-
-            // Plant specific readings (Moisture)
-            db.run(`CREATE TABLE IF NOT EXISTS plant_readings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                reading_id INTEGER,
-                sensor_index INTEGER,
-                moisture REAL,
-                FOREIGN KEY(reading_id) REFERENCES readings(id)
-            )`);
-
-            // Users Table
-            db.run(`CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE,
-                password TEXT
-            )`);
-
-            // Devices Table (Ownership)
-            db.run(`CREATE TABLE IF NOT EXISTS devices (
-                device_id TEXT PRIMARY KEY,
-                user_id INTEGER,
-                name TEXT,
-                FOREIGN KEY(user_id) REFERENCES users(id)
-            )`);
-        });
-    }
+const pool = new Pool({
+    connectionString,
 });
 
-module.exports = db;
+pool.on('error', (err, client) => {
+    console.error('Unexpected error on idle client', err);
+    process.exit(-1);
+});
+
+// Initialize Database Tables
+const initDb = async () => {
+    const client = await pool.connect();
+    try {
+        console.log('Connected to PostgreSQL database.');
+
+        await client.query('BEGIN');
+
+        // 1. Users Table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL
+            );
+        `);
+
+        // 2. Devices Table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS devices (
+                device_id TEXT PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                name TEXT,
+                secret TEXT
+            );
+        `);
+
+        // 3. Readings Table (JSONB for sensor data)
+        // Data format found in firmware: { temperature, humidity, pumpState, threshold, tankEmpty, plants: [...] }
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS readings (
+                id SERIAL PRIMARY KEY,
+                device_id TEXT NOT NULL,
+                data JSONB NOT NULL,
+                timestamp TIMESTAMPTZ DEFAULT NOW()
+            );
+        `);
+
+        // Index on device_id and timestamp for faster queries
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_readings_device_id ON readings(device_id);`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_readings_timestamp ON readings(timestamp DESC);`);
+
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_readings_timestamp ON readings(timestamp DESC);`);
+
+        // 4. AI Learning Table (Persist Adaptive History)
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS ai_learning (
+                id SERIAL PRIMARY KEY,
+                data_point FLOAT NOT NULL,
+                timestamp TIMESTAMPTZ DEFAULT NOW()
+            );
+        `);
+
+        await client.query('COMMIT');
+        console.log('Database tables initialized successfully.');
+    } catch (e) {
+        await client.query('ROLLBACK');
+        console.error('Error initializing database:', e);
+    } finally {
+        client.release();
+    }
+};
+
+// Auto-run init
+initDb();
+
+module.exports = {
+    query: (text, params) => pool.query(text, params),
+};

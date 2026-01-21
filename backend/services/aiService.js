@@ -1,4 +1,5 @@
 const tf = require('@tensorflow/tfjs-node');
+const db = require('../database');
 
 class AIService {
     constructor() {
@@ -9,11 +10,24 @@ class AIService {
         this.healthScore = 100;
         this.recentAnomalies = [];
         this.successfulWaterings = []; // History of moisture rise per burst
+
+        // Soak Timer State
+        this.soakStartTime = null;
+        this.soakStartMoisture = 0;
+        this.lastPumpState = 0;
     }
 
     async init() {
         console.log("Initializing AI Service...");
         try {
+            // Load Persistent Learning History
+            const historyRes = await db.query('SELECT data_point FROM ai_learning ORDER BY timestamp DESC LIMIT 20');
+            if (historyRes.rows.length > 0) {
+                // Reverse to keep oldest->newest order in memory
+                this.successfulWaterings = historyRes.rows.map(r => r.data_point).reverse();
+                console.log(`AI: Loaded ${this.successfulWaterings.length} learning points from DB:`, this.successfulWaterings);
+            }
+
             // Define a simple Linear Regression model for "Drying Rate Prediction"
             // Input: [Temperature, Humidity]
             // Output: [MoistureLossPerMinute]
@@ -130,64 +144,95 @@ class AIService {
             this.successfulWaterings.push(riseAmount);
             if (this.successfulWaterings.length > 10) this.successfulWaterings.shift();
             console.log(`AI: Learned new normal. History: [${this.successfulWaterings}]`);
+
+            // Persist to DB (Fire and Forget)
+            db.query('INSERT INTO ai_learning (data_point) VALUES ($1)', [riseAmount]).catch(err => {
+                console.error("Failed to save AI learning point:", err);
+            });
         }
     }
 
     /**
      * Calculate System Health Score (0-100)
-     * Detects anomalies like "Pump running but moisture not rising"
+     * Detects anomalies with consideration for 30s soak time
      */
     detectAnomaly(readings) {
-        // readings: Array of recent data points
-        if (!readings || readings.length < 5) return { score: 100, shouldLockout: false };
+        // We only process the LATEST reading
+        if (!readings || readings.length === 0) return { score: this.healthScore, shouldLockout: this.healthScore < 60 };
 
-        let anomalyPenalty = 0;
         const latest = readings[readings.length - 1];
-        const prev = readings[readings.length - 2];
+        const currentPumpState = latest.pump_state;
+        const currentMoisture = latest.moisture;
 
-        // 1. Pump Failure Detection (Immediate)
-        // If pump was ON in previous reading, and moisture DID NOT increase in latest
-        if (prev.pump_state === 1) {
-            const rise = latest.moisture - prev.moisture;
+        // --- 1. Detect Pump Stop (Start Soak Timer) ---
+        if (this.lastPumpState === 1 && currentPumpState === 0) {
+            console.log(`AI: Pump finished. Starting 35s Soak Timer. Baseline Moisture: ${currentMoisture}%`);
+            this.soakStartTime = Date.now();
+            this.soakStartMoisture = currentMoisture;
+        }
 
-            // Adaptive Check: If we have history, compare against it
-            if (this.successfulWaterings.length > 3) {
-                const avgRise = this.successfulWaterings.reduce((a, b) => a + b, 0) / this.successfulWaterings.length;
-                const threshold = avgRise * 0.2; // Expect at least 20% of normal rise
+        // --- 2. Check Soak Timer ---
+        if (this.soakStartTime) {
+            const elapsed = Date.now() - this.soakStartTime;
 
-                if (rise < threshold) {
-                    anomalyPenalty += 40; // Stricter penalty for deviation from normal
-                    this._logAnomaly(`Pump Anomaly: Rise ${rise}% is below expected ${threshold.toFixed(1)}%`);
-                } else {
-                    // It was a good session, track it!
-                    this.trackWateringSession(rise);
-                }
+            if (elapsed >= 35000) { // 35 Seconds (30s Soak + 5s Buffer)
+                console.log("AI: Soak Complete. Analyzing Rise...");
+
+                // Calculate Rise from START of soak (when water was added) to NOW
+                const rise = currentMoisture - this.soakStartMoisture;
+                this._analyzeRise(rise);
+
+                // Reset Timer
+                this.soakStartTime = null;
             } else {
-                // Fallback: Simple check
-                if (rise <= 0) {
-                    anomalyPenalty += 30;
-                    this._logAnomaly("Pump Anomaly: Pump running but moisture steady/dropping");
-                } else {
-                    this.trackWateringSession(rise);
-                }
+                // Still soaking, do not judge yet
+                // console.log(`AI: Soaking... (${(elapsed/1000).toFixed(1)}s)`);
             }
         }
 
-        // 2. Sensor Noise Detection (Variance Check)
-        // If sensor jumps wildly (> 20%) in one reading
-        if (Math.abs(latest.moisture - prev.moisture) > 20 && prev.pump_state === 0) {
-            anomalyPenalty += 10;
-            this._logAnomaly("Sensor Noise: Sudden moisture jump without pump");
-        }
+        // --- 3. Immediate Sensor Noise Check (Instant) ---
+        // If sensor jumps wildly (> 20%) in one reading WITHOUT pump
+        // We need 'prev' for this, but simplistic check is ok for now or we rely on sensor firmware valid range
+        // For simplicity, let's skip single-frame variance check to avoid "missing prev" bug in this stateless payload version
 
-        // Decay the score
-        this.healthScore = Math.max(0, 100 - anomalyPenalty);
+        // Update State
+        this.lastPumpState = currentPumpState;
 
         return {
             score: this.healthScore,
             anomalies: this.recentAnomalies,
             shouldLockout: this.healthScore < 60
         };
+    }
+
+    _analyzeRise(rise) {
+        let anomalyPenalty = 0;
+
+        // Adaptive Check: If we have history, compare against it
+        if (this.successfulWaterings.length > 3) {
+            const avgRise = this.successfulWaterings.reduce((a, b) => a + b, 0) / this.successfulWaterings.length;
+            const threshold = avgRise * 0.2; // Expect at least 20% of normal rise
+
+            if (rise < threshold) {
+                anomalyPenalty += 40;
+                this._logAnomaly(`Pump Anomaly: Rise ${rise}% is below expected ${threshold.toFixed(1)}%`);
+            } else {
+                this.trackWateringSession(rise);
+            }
+        } else {
+            // Fallback: Simple check
+            if (rise <= 0) {
+                anomalyPenalty += 30;
+                this._logAnomaly(`Pump Anomaly: Pump ran but moisture changed by ${rise}%`);
+            } else {
+                this.trackWateringSession(rise);
+            }
+        }
+
+        // Decay the score
+        this.healthScore = Math.max(0, this.healthScore - anomalyPenalty);
+        // Optionally recover score slowly if good? 
+        // For now, "Reset System" is the way to restore.
     }
 
     _logAnomaly(msg) {

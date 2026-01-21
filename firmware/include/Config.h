@@ -22,6 +22,8 @@
 #define DEVICE_ID "esp32-default" // Fallback
 #endif
 
+#define DEVICE_SECRET "change_me_to_random_string" // Security Secret
+
 // OTA Updates
 #define OTA_HOSTNAME "PlantCare-" DEVICE_ID
 #define OTA_PASSWORD "admin" // Optional security measure

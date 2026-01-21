@@ -97,6 +97,7 @@ void loop() {
     HTTPClient http;
     http.begin(wifiClient, SERVER_URL);
     http.addHeader("Content-Type", "application/json");
+    http.addHeader("x-device-secret", DEVICE_SECRET);
     
     int httpResponseCode = http.POST(jsonStr);
     if (httpResponseCode > 0) {

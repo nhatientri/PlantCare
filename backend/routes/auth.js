@@ -12,24 +12,29 @@ router.post('/register', async (req, res) => {
 
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
-        db.run('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword], function (err) {
-            if (err) {
-                if (err.message.includes('UNIQUE constraint failed')) {
-                    return res.status(400).json({ error: "Username already exists" });
-                }
-                return res.status(500).json({ error: err.message });
-            }
-            res.status(201).json({ message: "User created", userId: this.lastID });
-        });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
+
+        const result = await db.query(
+            'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id',
+            [username, hashedPassword]
+        );
+
+        res.status(201).json({ message: "User created", userId: result.rows[0].id });
+
+    } catch (err) {
+        if (err.constraint === 'users_username_key') { // Postgres unique constraint error code/name usually
+            return res.status(400).json({ error: "Username already exists" });
+        }
+        res.status(500).json({ error: err.message });
     }
 });
 
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
     const { username, password } = req.body;
-    db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
-        if (err) return res.status(500).json({ error: err.message });
+
+    try {
+        const result = await db.query('SELECT * FROM users WHERE username = $1', [username]);
+        const user = result.rows[0];
+
         if (!user) return res.status(400).json({ error: "User not found" });
 
         if (await bcrypt.compare(password, user.password)) {
@@ -38,7 +43,9 @@ router.post('/login', (req, res) => {
         } else {
             res.status(403).json({ error: "Invalid credentials" });
         }
-    });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 module.exports = router;

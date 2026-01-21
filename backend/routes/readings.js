@@ -2,118 +2,133 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const authenticateToken = require('../middleware/auth');
-
+const aiService = require('../services/aiService');
 const mqttClient = require('../lib/mqttClient');
+
 // GET Readings
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
     const limit = req.query.limit || 50;
     const userId = req.user.id;
 
-    db.all('SELECT device_id FROM devices WHERE user_id = ?', [userId], (err, devices) => {
-        if (err) return res.status(500).json({ error: err.message });
+    try {
+        const deviceResult = await db.query('SELECT device_id FROM devices WHERE user_id = $1', [userId]);
+        const devices = deviceResult.rows;
 
         if (devices.length === 0) return res.json({ "message": "success", "data": [] });
 
-        const deviceIds = devices.map(d => `'${d.device_id}'`).join(',');
-        const sql = `SELECT * FROM readings WHERE device_id IN (${deviceIds}) ORDER BY timestamp DESC LIMIT ?`;
+        const deviceIds = devices.map(d => d.device_id);
 
-        db.all(sql, [limit], (err, rows) => {
-            if (err) return res.status(400).json({ "error": err.message });
-            if (rows.length === 0) return res.json({ "message": "success", "data": [] });
+        const sql = `
+            SELECT id, device_id, timestamp, data 
+            FROM readings 
+            WHERE device_id = ANY($1) 
+            ORDER BY timestamp DESC 
+            LIMIT $2
+        `;
 
-            const readingIds = rows.map(r => r.id).join(',');
-            const plantSql = `SELECT * FROM plant_readings WHERE reading_id IN (${readingIds})`;
+        const readingsResult = await db.query(sql, [deviceIds, limit]);
 
-            db.all(plantSql, [], (err, plantRows) => {
-                if (err) return res.json({ "message": "success", "data": rows });
-
-                const readingsWithPlants = rows.map(reading => {
-                    const plants = plantRows.filter(p => p.reading_id === reading.id);
-                    return { ...reading, plants: plants.map(p => ({ index: p.sensor_index, moisture: p.moisture })) };
-                });
-
-                res.json({ "message": "success", "data": readingsWithPlants });
-            });
+        const formattedReadings = readingsResult.rows.map(row => {
+            return {
+                id: row.id,
+                device_id: row.device_id,
+                timestamp: row.timestamp,
+                ...row.data
+            };
         });
-    });
-});
 
-// POST Readings (From ESP32)
-const aiService = require('../services/aiService');
+        res.json({ "message": "success", "data": formattedReadings });
+
+    } catch (err) {
+        console.error("Error fetching readings:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // POST Readings (From ESP32)
 router.post('/', async (req, res) => {
     const { deviceId, temperature, humidity, pumpState, plants } = req.body;
+    const deviceSecret = req.headers['x-device-secret'];
 
     if (!deviceId) return res.status(400).json({ error: "Missing deviceId" });
+    if (!deviceSecret) return res.status(401).json({ error: "Missing x-device-secret header" });
 
+    // --- SECURITY CHECK & AUTO-REGISTRATION ---
+    try {
+        const devCheck = await db.query('SELECT secret FROM devices WHERE device_id = $1', [deviceId]);
 
+        if (devCheck.rows.length === 0) {
+            // New Device: Auto-register with secret (Unclaimed)
+            await db.query('INSERT INTO devices (device_id, secret) VALUES ($1, $2)', [deviceId, deviceSecret]);
+            console.log(`New Device Auto-Registered: ${deviceId}`);
+        } else {
+            // Existing Device: Verify Secret
+            const storedSecret = devCheck.rows[0].secret;
+            if (storedSecret !== deviceSecret) {
+                console.warn(`Unauthorized access attempt for ${deviceId}`);
+                return res.status(403).json({ error: "Invalid Device Secret" });
+            }
+        }
+    } catch (err) {
+        console.error("Error during device security check:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+    }
 
     // --- AI ANALYSIS ---
     // 1. Detect Anomaly
     const healthData = aiService.detectAnomaly([{
         pump_state: pumpState ? 1 : 0,
-        moisture: plants && plants[0] ? plants[0].moisture : 0, // Using 1st plant for simple anomaly check
+        moisture: plants && plants[0] ? plants[0].moisture : 0,
         timestamp: new Date()
     }]);
 
-    // 2. Predict Dry Time (for first plant as demo)
+    // 2. Predict Dry Time
     let predictedHours = null;
     if (plants && plants[0]) {
         predictedHours = await aiService.predictTimeUntilDry(plants[0].moisture, 30, temperature, humidity);
     }
-    // -------------------
 
     if (healthData.shouldLockout) {
         console.log(`CRITICAL: Health Score ${healthData.score} < 60. Sending LOCKOUT command.`);
         mqttClient.publish(`plantcare/${deviceId}/command`, 'LOCK_SYSTEM');
     }
 
-    const sql = 'INSERT INTO readings (device_id, temperature, humidity, pump_state) VALUES (?,?,?,?)';
-    const params = [deviceId, temperature, humidity, pumpState ? 1 : 0];
+    // Prepare Data Object for JSONB
+    const dataObj = {
+        temperature,
+        humidity,
+        pumpState: pumpState ? 1 : 0,
+        plants: plants || [],
+        health_score: healthData.score,
+        predicted_hours: predictedHours
+    };
 
-    db.run(sql, params, function (err) {
-        if (err) return res.status(400).json({ "error": err.message });
+    const sql = 'INSERT INTO readings (device_id, data) VALUES ($1, $2) RETURNING id';
 
-        const readingId = this.lastID;
+    try {
+        const result = await db.query(sql, [deviceId, dataObj]);
+        const readingId = result.rows[0].id;
 
         // Emit via Socket.io
         const io = req.app.get('socketio');
         if (io) {
             io.emit('new_reading', {
                 device_id: deviceId,
-                temperature: temperature,
-                humidity: humidity,
-                pump_state: pumpState ? 1 : 0,
                 timestamp: new Date().toISOString(),
-                plants: plants,
-                // AI Data
-                health_score: healthData.score,
-                predicted_hours: predictedHours
-            });
-            console.log(`Socket.io: Emitted new_reading for ${deviceId} with AI score ${healthData.score}`);
-        }
-
-        if (plants && Array.isArray(plants) && plants.length > 0) {
-            const placeholder = plants.map(() => '(?, ?, ?)').join(',');
-            const flatParams = [];
-            plants.forEach(p => {
-                flatParams.push(readingId, p.index, p.moisture);
-            });
-
-            const plantSql = `INSERT INTO plant_readings (reading_id, sensor_index, moisture) VALUES ${placeholder}`;
-            db.run(plantSql, flatParams, (err) => {
-                if (err) console.error("Error inserting plant readings:", err);
+                ...dataObj
             });
         }
 
         res.json({
             "message": "success",
-            "data": { ...req.body, health_score: healthData.score, predicted_hours: predictedHours },
-            "id": readingId,
+            "data": { deviceId, ...dataObj },
             "id": readingId
         });
-    });
+
+    } catch (err) {
+        console.error("Error saving reading:", err);
+        res.status(500).json({ "error": err.message });
+    }
 });
 
 module.exports = router;

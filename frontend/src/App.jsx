@@ -13,8 +13,10 @@ function App() {
   const [showRegister, setShowRegister] = useState(false);
 
   // Device Claiming State
+  // Device Claiming State
   const [claimId, setClaimId] = useState('');
   const [claimName, setClaimName] = useState('');
+  const [claimSecret, setClaimSecret] = useState('');
   const [claimError, setClaimError] = useState('');
 
   // Use Environment Variable for API URL (Vite style)
@@ -151,13 +153,18 @@ function App() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ deviceId: claimId, name: claimName || 'My Plant' })
+        body: JSON.stringify({
+          deviceId: claimId,
+          name: claimName || 'My Plant',
+          secret: claimSecret
+        })
       });
 
       const data = await res.json();
       if (res.ok) {
         setClaimId('');
         setClaimName('');
+        setClaimSecret('');
         alert('Device claimed successfully!');
         fetchData(); // Refresh data
       } else {
@@ -293,12 +300,21 @@ function App() {
             style={{ flex: 1, padding: '0.8rem', borderRadius: '6px', border: '1px solid #334155', backgroundColor: '#0f172a', color: 'white' }}
             required
           />
+
           <input
             type="text"
             placeholder="Device Name (e.g. Living Room)"
             value={claimName}
             onChange={e => setClaimName(e.target.value)}
             style={{ flex: 1, padding: '0.8rem', borderRadius: '6px', border: '1px solid #334155', backgroundColor: '#0f172a', color: 'white' }}
+          />
+          <input
+            type="password"
+            placeholder="Device Secret (Password)"
+            value={claimSecret}
+            onChange={e => setClaimSecret(e.target.value)}
+            style={{ flex: 1, padding: '0.8rem', borderRadius: '6px', border: '1px solid #334155', backgroundColor: '#0f172a', color: 'white' }}
+            required
           />
           <button type="submit" className="btn-primary" style={{ padding: '0.8rem 1.5rem' }}>Claim Device</button>
         </form>

@@ -32,36 +32,68 @@ function App() {
     if (!token) return;
 
     try {
-      const response = await fetch(`${API_URL}/api/readings?limit=100`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const [readingsRes, devicesRes] = await Promise.all([
+        fetch(`${API_URL}/api/readings?limit=50`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${API_URL}/api/devices`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
 
-      if (response.status === 401 || response.status === 403) {
+      // Check for auth errors from either response
+      if (readingsRes.status === 401 || readingsRes.status === 403 || devicesRes.status === 401 || devicesRes.status === 403) {
         logout();
         return;
       }
 
-      const json = await response.json();
+      const readingsData = await readingsRes.json();
+      const devicesData = await devicesRes.json();
 
-      if (json.data && json.data.length > 0) {
-        const sortedData = json.data.reverse();
-
-        // Group by Device ID
+      if (readingsData.data && devicesData.data) {
         const groups = {};
-        sortedData.forEach(reading => {
-          // Because we reversed it (oldest -> newest), 
-          // the LAST item in the array for a given device is the latest one.
-          groups[reading.device_id] = reading;
+
+        // 1. Initialize all claimed devices first (so they exist even if offline)
+        devicesData.data.forEach(dev => {
+          groups[dev.device_id] = {
+            device_id: dev.device_id,
+            name: dev.name,
+            timestamp: '1970-01-01T00:00:00Z', // Default old timestamp
+            pump_state: 0, // Default off
+            plants: [], // Default empty
+            isOffline: true // Assume offline until proven otherwise
+          };
         });
+
+        // 2. Overlay latest readings
+        // Since API returns sorted by timestamp DESC, the first occurrence is the latest
+        readingsData.data.forEach(reading => {
+          const did = reading.device_id;
+          // Only update if it's the first (latest) reading for this device we've encountered
+          // OR if we already initialized it from claimed list
+          if (groups[did] && groups[did].isOffline) {
+            // We use isOffline flag to track "have we seen a reading yet?" for this fetch
+            groups[did] = {
+              ...reading,
+              name: groups[did].name, // Preserve custom name
+              isOffline: false // Mark as having data (online check happens in render)
+            };
+          } else if (!groups[did]) {
+            // Device seen in readings but not claimed? (Shouldn't happen with strict API but good safety)
+            groups[did] = reading;
+          }
+        });
+
         setGroupedData(groups);
 
-        // Initialize inputs if not set
+        // Update Threshold Inputs
         const inputState = { ...thresholdInputs };
         Object.keys(groups).forEach(did => {
+          // If we have a threshold from backend and user hasn't typed anything
           if (!inputState[did] && groups[did].threshold) {
             inputState[did] = groups[did].threshold;
           } else if (!inputState[did]) {
-            inputState[did] = 30; // Default fallback
+            inputState[did] = 30;
           }
         });
         setThresholdInputs(inputState);

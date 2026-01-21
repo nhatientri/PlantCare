@@ -15,9 +15,9 @@ router.post('/', authenticateToken, (req, res) => {
         return res.status(400).json({ error: "Missing deviceId or command" });
     }
 
-    db.get('SELECT * FROM devices WHERE device_id = ? AND user_id = ?', [deviceId, req.user.id], (err, row) => {
+    db.query('SELECT * FROM devices WHERE device_id = $1 AND user_id = $2', [deviceId, req.user.id], (err, resDb) => {
         if (err) return res.status(500).json({ error: err.message });
-        if (!row) return res.status(403).json({ error: "You do not own this device" });
+        if (resDb.rows.length === 0) return res.status(403).json({ error: "You do not own this device" });
 
         console.log(`Queueing command '${command}' for ${deviceId}`);
         commandStore.set(deviceId, command);

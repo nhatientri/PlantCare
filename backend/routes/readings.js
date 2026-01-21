@@ -47,7 +47,7 @@ router.get('/', authenticateToken, async (req, res) => {
 
 // POST Readings (From ESP32)
 router.post('/', async (req, res) => {
-    const { deviceId, temperature, humidity, pumpState, plants } = req.body;
+    const { deviceId, temperature, humidity, pumpState, plants, threshold, tankEmpty } = req.body;
     const deviceSecret = req.headers['x-device-secret'];
 
     if (!deviceId) return res.status(400).json({ error: "Missing deviceId" });
@@ -99,6 +99,8 @@ router.post('/', async (req, res) => {
         humidity,
         pumpState: pumpState ? 1 : 0,
         plants: plants || [],
+        threshold,
+        tankEmpty,
         health_score: healthData.score,
         predicted_hours: predictedHours
     };

@@ -22,7 +22,6 @@ public:
     // Accessors for state
     bool isTankEmptyAlert() { return isTankEmpty; }
     bool isSystemLocked() { return isSafetyLocked; }
-    bool isSystemLocked() { return isSafetyLocked; }
     void resetAlerts() { isTankEmpty = false; tankFailureCount = 0; isSafetyLocked = false; }
 
 private:

@@ -13,6 +13,7 @@ struct PlantData {
 class SensorManager {
 public:
     SensorManager();
+    void setup();
     // Updates all sensor readings (Call once per loop)
     void update();
 

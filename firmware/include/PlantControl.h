@@ -15,9 +15,8 @@ public:
     // Accepts current average moisture to track tank levels
     bool processAutoWatering(bool moistureNeedsWatering, int currentAvgMoisture, bool isSafeToWater);
     
-    void turnPumpOn();
-    void turnPumpOff();
-
+    void startManualWatering();
+    
     // Accessors for state
     bool isTankEmptyAlert() { return isTankEmpty; }
     void resetAlerts() { isTankEmpty = false; tankFailureCount = 0; }
@@ -27,7 +26,8 @@ private:
     enum WateringState {
         IDLE,
         WATERING,
-        SOAKING
+        SOAKING,
+        MANUAL_WATERING
     };
     
     WateringState currentState = IDLE;

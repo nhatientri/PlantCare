@@ -36,6 +36,68 @@ class AIService {
     }
 
     /**
+     * Train the model with real historical data
+     * @param {Array} trainingData - Array of {temp, humidity, moisture, timestamp}
+     */
+    async trainModel(trainingData) {
+        if (!trainingData || trainingData.length < 10) {
+            console.log("Not enough data to train (need > 10 points)");
+            return { success: false, message: "Insufficient data" };
+        }
+
+        console.log(`Starting training with ${trainingData.length} points...`);
+
+        // 1. Process Data: Calculate "Drying Rate" (Moisture Loss per Minute)
+        const inputs = [];
+        const outputs = [];
+
+        for (let i = 1; i < trainingData.length; i++) {
+            const prev = trainingData[i - 1];
+            const curr = trainingData[i];
+
+            // Only learn from "Drying" phases (Pump OFF, Moisture Dropping)
+            if (curr.pump_state === 0 && prev.pump_state === 0 && curr.moisture < prev.moisture) {
+                const timeDiffMs = new Date(curr.timestamp) - new Date(prev.timestamp);
+                const timeDiffMins = timeDiffMs / 1000 / 60;
+
+                if (timeDiffMins > 0) {
+                    const moistureLoss = prev.moisture - curr.moisture;
+                    const rate = moistureLoss / timeDiffMins;
+
+                    // Filter noise (rate shouldn't be extreme)
+                    if (rate > 0 && rate < 5.0) {
+                        inputs.push([prev.temperature, prev.humidity]);
+                        outputs.push([rate]);
+                    }
+                }
+            }
+        }
+
+        if (inputs.length === 0) {
+            return { success: false, message: "No valid drying phases found in data" };
+        }
+
+        // 2. Convert to Tensors
+        const xs = tf.tensor2d(inputs);
+        const ys = tf.tensor2d(outputs);
+
+        // 3. Train
+        await this.model.fit(xs, ys, {
+            epochs: 20,
+            shuffle: true,
+            callbacks: {
+                onEpochEnd: (epoch, logs) => console.log(`Epoch ${epoch}: loss=${logs.loss}`)
+            }
+        });
+
+        xs.dispose();
+        ys.dispose();
+
+        console.log("Training Complete.");
+        return { success: true, processedSamples: inputs.length };
+    }
+
+    /**
      * Predict how many HOURS until moisture hits the critical threshold (e.g. 30%)
      */
     async predictTimeUntilDry(currentMoisture, criticalThreshold, temp, humidity) {

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const authenticateToken = require('../middleware/auth');
-const commandStore = require('../lib/commandStore');
+
 
 // GET Readings
 router.get('/', authenticateToken, (req, res) => {
@@ -47,11 +47,7 @@ router.post('/', async (req, res) => {
 
     if (!deviceId) return res.status(400).json({ error: "Missing deviceId" });
 
-    // Check for pending commands to return to ESP32
-    const pendingCommand = commandStore.get(deviceId);
-    if (pendingCommand) {
-        console.log(`Sending command '${pendingCommand}' to ${deviceId}`);
-    }
+
 
     // --- AI ANALYSIS ---
     // 1. Detect Anomaly
@@ -110,7 +106,7 @@ router.post('/', async (req, res) => {
             "message": "success",
             "data": { ...req.body, health_score: healthData.score, predicted_hours: predictedHours },
             "id": readingId,
-            "command": pendingCommand
+            "id": readingId
         });
     });
 });

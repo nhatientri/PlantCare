@@ -147,6 +147,27 @@ function App() {
     }
   };
 
+  const [isTraining, setIsTraining] = useState(false);
+  const handleTrainModel = async () => {
+    setIsTraining(true);
+    try {
+      const res = await fetch(`${API_URL}/api/ai/train`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Training Complete! Processed ${data.processedSamples} samples.`);
+      } else {
+        alert(`Training Skipped: ${data.message}`);
+      }
+    } catch (e) {
+      alert("Training Failed: Network Error");
+    } finally {
+      setIsTraining(false);
+    }
+  };
+
   // Initial Fetch & Socket Setup
   useEffect(() => {
     if (isAuthenticated) {

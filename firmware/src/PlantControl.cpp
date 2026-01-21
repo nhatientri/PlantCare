@@ -57,7 +57,7 @@ bool PlantControl::processAutoWatering(bool moistureNeedsWatering, int currentAv
        // OR: The user requested comparison. Let's do it inside the SOAK check.
     }
 
-    // State Machine
+// State Machine
     switch (currentState) {
         case IDLE:
             if (moistureNeedsWatering) {
@@ -87,7 +87,7 @@ bool PlantControl::processAutoWatering(bool moistureNeedsWatering, int currentAv
 
                 // Start Watering Session
                 Serial.println("Starting Watering Session (Burst 1)");
-                turnPumpOn();
+                digitalWrite(PUMP_PIN, HIGH);
                 currentState = WATERING;
                 stateStartTime = now;
                 currentSessionCycles = 1;
@@ -103,7 +103,7 @@ bool PlantControl::processAutoWatering(bool moistureNeedsWatering, int currentAv
             // Pump is ON. Check if burst time is over.
             if (now - stateStartTime >= PUMP_BURST_MS) {
                 Serial.println("Burst finished. Turning Pump OFF. Starting Soak.");
-                turnPumpOff();
+                digitalWrite(PUMP_PIN, LOW);
                 currentState = SOAKING;
                 stateStartTime = now;
                 return false; 
@@ -143,7 +143,7 @@ bool PlantControl::processAutoWatering(bool moistureNeedsWatering, int currentAv
                 if (moistureNeedsWatering && !isTankEmpty) {
                     if (currentSessionCycles < MAX_WATERING_CYCLES) {
                         Serial.printf("Still dry. Starting Burst %d\n", currentSessionCycles + 1);
-                        turnPumpOn();
+                        digitalWrite(PUMP_PIN, HIGH);
                         currentState = WATERING;
                         stateStartTime = now;
                         currentSessionCycles++;
@@ -160,15 +160,25 @@ bool PlantControl::processAutoWatering(bool moistureNeedsWatering, int currentAv
                 }
             }
             break;
+            
+        case MANUAL_WATERING:
+            if (now - stateStartTime >= 5000) { // 5 Second Safety Limit for Manual
+                Serial.println("Manual Watering Timer Finished. Pump OFF.");
+                digitalWrite(PUMP_PIN, LOW);
+                currentState = IDLE;
+                return false;
+            }
+            return true; // Pump is ON
     }
 
-    return (currentState == WATERING);
+    return (currentState == WATERING || currentState == MANUAL_WATERING);
 }
 
-void PlantControl::turnPumpOn() {
+void PlantControl::startManualWatering() {
+    Serial.println("Manual Watering Triggered!");
     digitalWrite(PUMP_PIN, HIGH);
+    currentState = MANUAL_WATERING;
+    stateStartTime = millis();
 }
 
-void PlantControl::turnPumpOff() {
-    digitalWrite(PUMP_PIN, LOW);
-}
+

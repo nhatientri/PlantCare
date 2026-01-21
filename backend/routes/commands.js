@@ -4,12 +4,7 @@ const db = require('../database');
 const mqttClient = require('../lib/mqttClient');
 const authenticateToken = require('../middleware/auth');
 
-// In-memory command queue
-const commands = {}; // We might need to export this or move it to a shared state if readings route needs it
 
-// For now, let's keep it local to this module, but wait... 
-// The READINGS route needs access to this 'commands' object to send it back to ESP32.
-// So we should move this state to a separate module or export it.
 
 // Let's create a simple in-memory store
 const commandStore = require('../lib/commandStore');

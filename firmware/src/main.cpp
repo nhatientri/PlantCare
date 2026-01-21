@@ -107,10 +107,7 @@ void loop() {
     http.end();
   }
 
-  // --- 5. Send Data (MQTT) ---
-  if (network.isConnected()) {
-    network.publish(MQTT_TOPIC_DATA, jsonStr.c_str());
-  }
+
 }
 
 // MQTT Callback
@@ -122,11 +119,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.printf("MQTT Message [%s]: %s\n", topic, message.c_str());
 
   if (message == "PUMP_ON") {
-      // Manual Override
-      Serial.println("Command: PUMP_ON");
-      digitalWrite(PUMP_PIN, HIGH);
-      delay(5000); // Blocking for manual safety/simplicity
-      digitalWrite(PUMP_PIN, LOW);
+      // Manual Override (Non-Blocking)
+      controller.startManualWatering();
   }
   else if (message.startsWith("SET_THRESHOLD:")) {
       int newThreshold = message.substring(14).toInt();

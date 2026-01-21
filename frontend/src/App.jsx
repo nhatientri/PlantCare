@@ -153,8 +153,7 @@ function App() {
     } catch (e) {
       alert("Failed to update threshold");
     }
-    alert("Failed to update threshold");
-  }
+  };
 
 
   const handleResetSystem = async (deviceId) => {

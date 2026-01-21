@@ -44,7 +44,7 @@ const int MOISTURE_PINS[] = {34, 32};
 
 
 // Calibration
-#define MOISTURE_AIR 2600
+#define MOISTURE_AIR 1700
 #define MOISTURE_WATER 1000
 #define DEFAULT_MOISTURE_THRESHOLD 30 
 extern int wateringThreshold; // Dynamic Variable

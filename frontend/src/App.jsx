@@ -480,56 +480,73 @@ function App() {
                 </div>
 
                 <div style={{ marginTop: '1rem', borderTop: '1px solid #334155', paddingTop: '1rem' }}>
-                  <Settings size={16} />
-                  {latestreading.health_score < 60 ? 'UNLOCK SYSTEM' : 'Reset System'}
-                </button>
+                  <button
+                    onClick={() => handleResetSystem(deviceId)}
+                    style={{
+                      width: '100%',
+                      padding: '0.6rem',
+                      backgroundColor: latestreading.health_score < 60 ? '#ef4444' : '#334155',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    <Settings size={16} />
+                    {latestreading.health_score < 60 ? 'UNLOCK SYSTEM' : 'Reset System'}
+                  </button>
 
-                {/* Anomalies List */}
-                {latestreading.anomalies && latestreading.anomalies.length > 0 && (
-                  <div style={{ marginTop: '1rem', maxHeight: '100px', overflowY: 'auto' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Recent Issues:</div>
-                    {latestreading.anomalies.map((a, i) => (
-                      <div key={i} style={{ fontSize: '0.75rem', color: '#ef4444', marginBottom: '2px', display: 'flex', gap: '4px' }}>
-                        <span>•</span>
-                        <span>{a.msg}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                  {/* Anomalies List */}
+                  {latestreading.anomalies && latestreading.anomalies.length > 0 && (
+                    <div style={{ marginTop: '1rem', maxHeight: '100px', overflowY: 'auto' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Recent Issues:</div>
+                      {latestreading.anomalies.map((a, i) => (
+                        <div key={i} style={{ fontSize: '0.75rem', color: '#ef4444', marginBottom: '2px', display: 'flex', gap: '4px' }}>
+                          <span>•</span>
+                          <span>{a.msg}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Environment Sensors */}
-            <SensorCard
-              title="Temperature"
-              value={latestreading.temperature}
-              unit="°C"
-              icon={Thermometer}
-              color="#ef4444"
-            />
-            <SensorCard
-              title="Humidity"
-              value={latestreading.humidity}
-              unit="%"
-              icon={Wind}
-              color="#06b6d4"
-            />
-
-            {/* Plant Specific Sensors */}
-            {plants.map((plant, idx) => (
+              {/* Environment Sensors */}
               <SensorCard
-                key={idx}
-                title={`Plant ${plant.index + 1} Moisture ${plant.pin ? `(Pin ${plant.pin})` : ''}`}
-                value={plant.moisture}
-                unit="%"
-                icon={Droplets}
-                color="#3b82f6"
+                title="Temperature"
+                value={latestreading.temperature}
+                unit="°C"
+                icon={Thermometer}
+                color="#ef4444"
               />
-            ))}
+              <SensorCard
+                title="Humidity"
+                value={latestreading.humidity}
+                unit="%"
+                icon={Wind}
+                color="#06b6d4"
+              />
+
+              {/* Plant Specific Sensors */}
+              {plants.map((plant, idx) => (
+                <SensorCard
+                  key={idx}
+                  title={`Plant ${plant.index + 1} Moisture ${plant.pin ? `(Pin ${plant.pin})` : ''}`}
+                  value={plant.moisture}
+                  unit="%"
+                  icon={Droplets}
+                  color="#3b82f6"
+                />
+              ))}
+            </div>
           </div>
-          </div>
-  );
-})}
+        );
+      })}
     </div >
   );
 

@@ -94,9 +94,11 @@ void loop() {
 
   // --- 4. Send Data (HTTP) ---
   if (network.isConnected()) {
-    WiFiClient wifiClient; // Independent client for HTTP
+    // WiFiClient wifiClient; // Independent client for HTTP
+    WiFiClientSecure client;
+    client.setInsecure(); // Skip certificate verification
     HTTPClient http;
-    http.begin(wifiClient, SERVER_URL);
+    http.begin(client, SERVER_URL);
     http.addHeader("Content-Type", "application/json");
     http.addHeader("x-device-secret", DEVICE_SECRET);
     

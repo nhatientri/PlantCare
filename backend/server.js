@@ -37,6 +37,11 @@ mqttClient.on('message', (topic, message) => {
         try {
             const payload = JSON.parse(message.toString());
 
+            // Add timestamp if missing (critical for frontend "Online" check)
+            if (!payload.timestamp) {
+                payload.timestamp = new Date().toISOString();
+            }
+
             // Broadcast to frontend via Socket.IO
             io.emit('new_reading', payload);
 

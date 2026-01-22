@@ -94,22 +94,29 @@ void loop() {
   Serial.println(jsonStr);
 
   // --- 4. Send Data (HTTP) ---
+  // --- 4. Send Data (MQTT Priority) ---
   if (network.isConnected()) {
-    // WiFiClient wifiClient; // Independent client for HTTP
-    WiFiClientSecure client;
-    client.setInsecure(); // Skip certificate verification
-    HTTPClient http;
-    http.begin(client, SERVER_URL);
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("x-device-secret", DEVICE_SECRET);
-    
-    int httpResponseCode = http.POST(jsonStr);
-    if (httpResponseCode > 0) {
-      Serial.printf("HTTP POST Success: %d\n", httpResponseCode);
-    } else {
-      Serial.printf("HTTP POST Failed: %s\n", http.errorToString(httpResponseCode).c_str());
-    }
-    http.end();
+      // Publish to MQTT
+      network.publish(MQTT_TOPIC_DATA, jsonStr.c_str());
+      Serial.println("Data sent via MQTT");
+
+      // Fallback/Legacy HTTP (Optional, commenting out to rely on MQTT completely for now to solve SSL issues)
+      /*
+      WiFiClientSecure client;
+      client.setInsecure(); // Skip certificate verification
+      HTTPClient http;
+      http.begin(client, SERVER_URL);
+      http.addHeader("Content-Type", "application/json");
+      http.addHeader("x-device-secret", DEVICE_SECRET);
+      
+      int httpResponseCode = http.POST(jsonStr);
+      if (httpResponseCode > 0) {
+        Serial.printf("HTTP POST Success: %d\n", httpResponseCode);
+      } else {
+        Serial.printf("HTTP POST Failed: %s\n", http.errorToString(httpResponseCode).c_str());
+      }
+      http.end();
+      */
   }
 
 

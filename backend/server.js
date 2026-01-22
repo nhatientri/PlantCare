@@ -37,6 +37,17 @@ mqttClient.on('message', (topic, message) => {
         try {
             const payload = JSON.parse(message.toString());
 
+            // Normalize ID: Firmware sends 'deviceId', Frontend/DB uses 'device_id'
+            if (payload.deviceId && !payload.device_id) {
+                payload.device_id = payload.deviceId;
+            }
+
+            // Ignore invalid payloads
+            if (!payload.device_id) {
+                console.warn("Ignored MQTT message with missing device_id");
+                return;
+            }
+
             // Add timestamp if missing (critical for frontend "Online" check)
             if (!payload.timestamp) {
                 payload.timestamp = new Date().toISOString();

@@ -430,13 +430,6 @@ function App() {
               marginBottom: '1.5rem'
             }}>
 
-              {/* 1. Threshold Control Card (NEW) */}
-              <ThresholdControl
-                currentThreshold={pendingThresholds[deviceId] ? pendingThresholds[deviceId].val : (latestreading.threshold || 30)}
-                isSyncing={!!pendingThresholds[deviceId]}
-                onUpdate={(val) => handleUpdateThreshold(deviceId, val)}
-              />
-
               {/* 2. AI Insights Card */}
               <div style={{ backgroundColor: '#1e293b', padding: '1.5rem', borderRadius: '12px', border: '1px solid #6366f1', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: '#6366f1' }}></div>

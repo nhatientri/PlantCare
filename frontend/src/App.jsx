@@ -399,6 +399,13 @@ function App() {
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                {/* 1. Threshold Control (Moved back to header) */}
+                <ThresholdControl
+                  currentThreshold={pendingThresholds[deviceId] ? pendingThresholds[deviceId].val : (latestreading.threshold || 30)}
+                  isSyncing={!!pendingThresholds[deviceId]}
+                  onUpdate={(val) => handleUpdateThreshold(deviceId, val)}
+                />
+
                 <button
                   className="btn-primary"
                   style={{

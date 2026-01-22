@@ -118,7 +118,7 @@ void NetworkManager::reconnect() {
             // Subscribe to command topics
             String topic = "plantcare/" + String(DEVICE_ID) + "/command";
             client.subscribe(topic.c_str());
-            client.subscribe(MQTT_TOPIC_COMMAND); 
+            // client.subscribe(MQTT_TOPIC_COMMAND); // Removed wildcard subscription to prevent cross-talk 
         } else {
             Serial.print("failed, rc=");
             Serial.print(client.state());

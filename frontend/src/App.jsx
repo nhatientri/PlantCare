@@ -3,6 +3,7 @@ import { Droplets, Thermometer, Wind, Sprout, LogOut, PlusCircle, Settings, Save
 import { SensorCard } from './components/SensorCard';
 import { Login } from './components/Login';
 import { Register } from './components/Register';
+import { ThresholdControl } from './components/ThresholdControl'; // [NEW]
 import { useAuth } from './context/AuthContext';
 import { io } from 'socket.io-client';
 
@@ -12,7 +13,6 @@ function App() {
   const [wateringStates, setWateringStates] = useState({}); // { deviceId: boolean }
   const [showRegister, setShowRegister] = useState(false);
 
-  // Device Claiming State
   // Device Claiming State
   const [claimId, setClaimId] = useState('');
   const [claimName, setClaimName] = useState('');
@@ -24,9 +24,6 @@ function App() {
 
   // Socket State
   const [socket, setSocket] = useState(null);
-
-  // UI State for Thresholds
-  const [thresholdInputs, setThresholdInputs] = useState({}); // { deviceId: "30" }
 
   const fetchData = async () => {
     if (!token) return;
@@ -54,9 +51,6 @@ function App() {
         const groups = {};
 
         // 1. Initialize all claimed devices first (so they exist even if offline)
-        console.log("Devices API:", devicesData);
-        console.log("Readings API:", readingsData);
-
         devicesData.data.forEach(dev => {
           groups[dev.device_id] = {
             device_id: dev.device_id,
@@ -69,37 +63,20 @@ function App() {
         });
 
         // 2. Overlay latest readings
-        // Since API returns sorted by timestamp DESC, the first occurrence is the latest
         readingsData.data.forEach(reading => {
           const did = reading.device_id;
-          // Only update if it's the first (latest) reading for this device we've encountered
-          // OR if we already initialized it from claimed list
           if (groups[did] && groups[did].isOffline) {
-            // We use isOffline flag to track "have we seen a reading yet?" for this fetch
             groups[did] = {
               ...reading,
               name: groups[did].name, // Preserve custom name
-              isOffline: false // Mark as having data (online check happens in render)
+              isOffline: false
             };
           } else if (!groups[did]) {
-            // Device seen in readings but not claimed? (Shouldn't happen with strict API but good safety)
             groups[did] = reading;
           }
         });
 
         setGroupedData(groups);
-
-        // Update Threshold Inputs
-        const inputState = { ...thresholdInputs };
-        Object.keys(groups).forEach(did => {
-          // If we have a threshold from backend and user hasn't typed anything
-          if (!inputState[did] && groups[did].threshold) {
-            inputState[did] = groups[did].threshold;
-          } else if (!inputState[did]) {
-            inputState[did] = 30;
-          }
-        });
-        setThresholdInputs(inputState);
 
       } else {
         setGroupedData({});
@@ -138,16 +115,9 @@ function App() {
     }
   };
 
-  const handleUpdateThreshold = async (deviceId) => {
-    const val = parseInt(thresholdInputs[deviceId]);
-    if (isNaN(val) || val < 0 || val > 100) {
-      alert("Please enter a valid percentage (0-100)");
-      return;
-    }
-
-    // Optimistic Update UI (Don't wait for server)
-    // TODO: Add visual toast
-    console.log(`Sending Threshold: ${val}`);
+  // Simplified Handler - passed to ThresholdControl
+  const handleUpdateThreshold = async (deviceId, newVal) => {
+    console.log(`Sending Threshold: ${newVal}`);
 
     try {
       const res = await fetch(`${API_URL}/api/commands`, {
@@ -156,7 +126,7 @@ function App() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ deviceId, command: `SET_THRESHOLD:${val}` })
+        body: JSON.stringify({ deviceId, command: `SET_THRESHOLD:${newVal}` })
       });
 
       if (!res.ok) {
@@ -164,8 +134,13 @@ function App() {
         throw new Error(errData.error || 'Failed to update threshold');
       }
 
-      // Removing blocking alert. 
-      // The socket update will eventually confirm it. 
+      // Update local state immediately for responsiveness 
+      // (The socket will confirm it later)
+      setGroupedData(prev => ({
+        ...prev,
+        [deviceId]: { ...prev[deviceId], threshold: newVal }
+      }));
+
     } catch (e) {
       console.error("Failed to update threshold", e);
       alert(`Update Failed: ${e.message}`);
@@ -232,27 +207,6 @@ function App() {
     }
   };
 
-  const [isTraining, setIsTraining] = useState(false);
-  const handleTrainModel = async () => {
-    setIsTraining(true);
-    try {
-      const res = await fetch(`${API_URL}/api/ai/train`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert(`Training Complete! Processed ${data.processedSamples} samples.`);
-      } else {
-        alert(`Training Skipped: ${data.message}`);
-      }
-    } catch (e) {
-      alert("Training Failed: Network Error");
-    } finally {
-      setIsTraining(false);
-    }
-  };
-
   // Initial Fetch & Socket Setup
   useEffect(() => {
     if (isAuthenticated) {
@@ -270,19 +224,16 @@ function App() {
         console.log("New Reading Socket:", reading);
 
         // Update Grouped Data (Latest State)
-        setGroupedData(prev => ({
-          ...prev,
-          [reading.device_id]: reading
-        }));
-
-        // Update input if we receive a confirmed threshold from device (optional sync)
-        if (reading.threshold) {
-          setThresholdInputs(prev => {
-            // Only update if user hasn't typed? Or just sync it?
-            // Let's sync it if it exists to keep UI consistent with reality
-            return { ...prev, [reading.device_id]: reading.threshold };
-          });
-        }
+        setGroupedData(prev => {
+          // Should we merge?
+          return {
+            ...prev,
+            [reading.device_id]: {
+              ...prev[reading.device_id],
+              ...reading
+            }
+          };
+        });
       });
 
       // Cleanup
@@ -398,7 +349,7 @@ function App() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '0.5rem', marginBottom: '1.5rem' }}>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <h2 style={{ textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.9rem', color: '#94a3b8', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  Device: <span style={{ color: 'white' }}>{deviceId}</span>
+                  Device: <span style={{ color: 'white' }}>{latestreading.name || deviceId}</span>
                   {latestreading.pump_state === 1 && <span style={{ marginLeft: '10px', color: '#f59e0b', fontSize: '0.8rem' }}>⚡ PUMP ON</span>}
                 </h2>
                 <div style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -415,32 +366,10 @@ function App() {
                       </span>
                     );
                   })()}
-                  {/* IP Address Logic if available in future payload */}
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                {/* SETTINGS AREA */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#0f172a', padding: '0.3rem 0.8rem', borderRadius: '8px', border: '1px solid #334155' }}>
-                  <Settings size={16} color="#94a3b8" />
-                  <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Water at:</span>
-                  <input
-                    type="number"
-                    min="0" max="100"
-                    value={thresholdInputs[deviceId] || 30}
-                    onChange={(e) => setThresholdInputs(prev => ({ ...prev, [deviceId]: e.target.value }))}
-                    style={{ width: '50px', background: 'transparent', border: 'none', borderBottom: '1px solid #94a3b8', color: 'white', textAlign: 'center' }}
-                  />
-                  <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>%</span>
-                  <button
-                    onClick={() => handleUpdateThreshold(deviceId)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
-                    title="Save Threshold"
-                  >
-                    <Save size={16} color="#10b981" />
-                  </button>
-                </div>
-
                 <button
                   className="btn-primary"
                   style={{
@@ -460,11 +389,18 @@ function App() {
 
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
               gap: '1.5rem',
               marginBottom: '1.5rem'
             }}>
-              {/* AI Insights Card */}
+
+              {/* 1. Threshold Control Card (NEW) */}
+              <ThresholdControl
+                currentThreshold={latestreading.threshold || 30}
+                onUpdate={(val) => handleUpdateThreshold(deviceId, val)}
+              />
+
+              {/* 2. AI Insights Card */}
               <div style={{ backgroundColor: '#1e293b', padding: '1.5rem', borderRadius: '12px', border: '1px solid #6366f1', position: 'relative', overflow: 'hidden' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: '#6366f1' }}></div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
@@ -571,9 +507,7 @@ function App() {
       })}
     </div >
   );
-
-
-
 }
 
 export default App;
+

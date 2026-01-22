@@ -113,7 +113,7 @@ function App() {
     try {
       setWateringStates(prev => ({ ...prev, [deviceId]: true }));
 
-      await fetch(`${API_URL}/api/commands`, {
+      const res = await fetch(`${API_URL}/api/commands`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -122,13 +122,18 @@ function App() {
         body: JSON.stringify({ deviceId, command: 'PUMP_ON' })
       });
 
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to send command');
+      }
+
       setTimeout(() => {
         setWateringStates(prev => ({ ...prev, [deviceId]: false }));
       }, 5000);
 
     } catch (err) {
       console.error(err);
-      alert('Failed to send command');
+      alert(`Command Failed: ${err.message}`);
       setWateringStates(prev => ({ ...prev, [deviceId]: false }));
     }
   };
@@ -145,7 +150,7 @@ function App() {
     console.log(`Sending Threshold: ${val}`);
 
     try {
-      await fetch(`${API_URL}/api/commands`, {
+      const res = await fetch(`${API_URL}/api/commands`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -153,10 +158,17 @@ function App() {
         },
         body: JSON.stringify({ deviceId, command: `SET_THRESHOLD:${val}` })
       });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to update threshold');
+      }
+
       // Removing blocking alert. 
       // The socket update will eventually confirm it. 
     } catch (e) {
       console.error("Failed to update threshold", e);
+      alert(`Update Failed: ${e.message}`);
     }
   };
 
@@ -165,7 +177,7 @@ function App() {
     if (!window.confirm('Are you sure? Only reset if you have fixed the physical issue (e.g. refilled tank, reconnected sensor).')) return;
 
     try {
-      await fetch(`${API_URL}/api/commands`, {
+      const res = await fetch(`${API_URL}/api/commands`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -173,10 +185,16 @@ function App() {
         },
         body: JSON.stringify({ deviceId, command: 'RESET_ALERTS' })
       });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to reset system');
+      }
+
       alert('System reset command sent.');
     } catch (e) {
       console.error(e);
-      alert("Failed to reset system");
+      alert(`Reset Failed: ${e.message}`);
     }
   };
 

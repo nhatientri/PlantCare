@@ -67,7 +67,7 @@ bool SensorManager::readSoilMoisture(PlantData* plants, int numPlants, int thres
 bool SensorManager::isAnyPlantWet(int safeThreshold) {
     for(int i=0; i<NUM_PLANTS && i<10; i++) {
         if (cachedMoisture[i] > safeThreshold) {
-            Serial.printf("Safety Block: Plant %d is too wet (%d%%)\n", i, cachedMoisture[i]);
+            // Serial.printf("Safety Block: Plant %d is too wet (%d%%)\n", i, cachedMoisture[i]); // Too spammy
             return true;
         }
     }

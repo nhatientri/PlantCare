@@ -190,9 +190,11 @@ bool PlantControl::processAutoWatering(bool moistureNeedsWatering, int currentAv
 void PlantControl::startManualWatering() {
     if (isSafetyLocked) {
         Serial.println("Manual Watering BLOCKED: System is Locked!");
+        lastStatusMessage = "Blocked: System Locked";
         return;
     }
     Serial.println("Manual Watering Triggered!");
+    lastStatusMessage = "Manual Watering";
     digitalWrite(PUMP_PIN, HIGH);
     currentState = MANUAL_WATERING;
     stateStartTime = millis();

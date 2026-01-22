@@ -9,15 +9,18 @@ const authenticateToken = require('../middleware/auth');
 // Let's create a simple in-memory store
 const commandStore = require('../lib/commandStore');
 
-router.post('/', authenticateToken, (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
     const { deviceId, command } = req.body;
     if (!deviceId || !command) {
         return res.status(400).json({ error: "Missing deviceId or command" });
     }
 
-    db.query('SELECT * FROM devices WHERE device_id = $1 AND user_id = $2', [deviceId, req.user.id], (err, resDb) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (resDb.rows.length === 0) return res.status(403).json({ error: "You do not own this device" });
+    try {
+        const resDb = await db.query('SELECT * FROM devices WHERE device_id = $1 AND user_id = $2', [deviceId, req.user.id]);
+
+        if (resDb.rows.length === 0) {
+            return res.status(403).json({ error: "You do not own this device" });
+        }
 
         console.log(`Queueing command '${command}' for ${deviceId}`);
         commandStore.set(deviceId, command);
@@ -26,13 +29,19 @@ router.post('/', authenticateToken, (req, res) => {
         mqttClient.publish(topic, command, (err) => {
             if (err) {
                 console.error("MQTT Publish Error:", err);
+                // Note: We might want to return 500 here, but we already sent the response? 
+                // No, we haven't sent response yet.
             } else {
                 console.log(`MQTT: Published '${command}' to ${topic}`);
             }
         });
 
         res.json({ message: "Command queued and published", deviceId, command });
-    });
+
+    } catch (err) {
+        console.error("Database Error:", err);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 module.exports = router;

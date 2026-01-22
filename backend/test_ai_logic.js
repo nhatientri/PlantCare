@@ -39,11 +39,11 @@ async function runTest() {
     console.log(">>> Turning Pump OFF (Should trigger Soak Timer)");
     await sendReading(false, 30); // Baseline moisture 30
 
-    // 4. Wait 30s (Simulating Soak)
-    console.log(">>> Waiting 30s...");
+    // 4. Wait 40s (Simulating Soak)
+    console.log(">>> Waiting 40s...");
 
     // Send keep-alive packets during soak (as firmware would)
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 8; i++) {
         await new Promise(r => setTimeout(r, 5000));
         await sendReading(false, 30); // Moisture stuck at 30 (BAD SCENARIO)
         console.log(`... ${5 * (i + 1)}s elapsed`);

@@ -159,7 +159,7 @@ class AIService {
     detectAnomaly(readings) {
         // We only process the LATEST reading
         // Debug Log
-        // console.log(`AI Detect: Input Size=${readings ? readings.length : 'null'}`);
+        console.log(`AI Detect: Input Size=${readings ? readings.length : 'null'} Pump=${readings && readings.length > 0 ? readings[readings.length - 1].pump_state : '?'}`);
 
         if (!readings || readings.length === 0) {
             // console.log("AI Detect: No readings provided.");
@@ -171,6 +171,8 @@ class AIService {
         const currentMoisture = latest.moisture;
 
         // --- 1. Detect Pump Stop (Start Soak Timer) ---
+        // console.log(`DEBUG: LastPump=${this.lastPumpState} CurrentPump=${currentPumpState}`);
+
         if (this.lastPumpState === 1 && currentPumpState === 0) {
             console.log(`AI: Pump finished. Starting 35s Soak Timer. Baseline Moisture: ${currentMoisture}%`);
             this.soakStartTime = Date.now();
@@ -192,7 +194,7 @@ class AIService {
                 this.soakStartTime = null;
             } else {
                 // Still soaking, do not judge yet
-                // console.log(`AI: Soaking... (${(elapsed/1000).toFixed(1)}s)`);
+                console.log(`AI: Soaking... (${(elapsed / 1000).toFixed(1)}s)`);
             }
         }
 
@@ -232,9 +234,11 @@ class AIService {
         } else {
             // Fallback: Simple check
             if (rise <= 0) {
+                console.log(`AI Decision: Rise ${rise} <= 0. PENALIZING.`);
                 anomalyPenalty += 30;
                 this._logAnomaly(`Pump Anomaly: Pump ran but moisture changed by ${rise}%`);
             } else {
+                console.log(`AI Decision: Rise ${rise} > 0. SUCCESS.`);
                 this.trackWateringSession(rise);
             }
         }

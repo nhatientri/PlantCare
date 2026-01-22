@@ -1,0 +1,61 @@
+Connected to PostgreSQL database.
+Database tables initialized successfully.
+Initializing AI Service...
+Epoch 1 / 10
+(node:30747) [DEP0051] DeprecationWarning: The `util.isNullOrUndefined` API is deprecated. Please use `arg === null || arg === undefined` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+23ms 5788us/step - loss=2049.84 
+Epoch 2 / 10
+
+2ms 453us/step - loss=4012850.00 
+Epoch 3 / 10
+
+2ms 511us/step - loss=8230339584.00 
+Epoch 4 / 10
+
+1ms 353us/step - loss=16880769171456.00 
+Epoch 5 / 10
+
+2ms 409us/step - loss=34623163744649216.00 
+Epoch 6 / 10
+
+1ms 333us/step - loss=71013559368843001856.00 
+Epoch 7 / 10
+
+1ms 289us/step - loss=1.4565177123271841e+23 
+Epoch 8 / 10
+
+1ms 312us/step - loss=2.987378629370256e+26 
+Epoch 9 / 10
+
+2ms 481us/step - loss=6.1272387772206e+29 
+Epoch 10 / 10
+
+4ms 1095us/step - loss=1.2567222976751754e+33 
+AI Model Initialized.
+Server running on port 3001
+Connected to MQTT Broker
+Subscribed to plantcare/readings
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=1
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=1
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0
+AI Detect: Input Size=1 Pump=0

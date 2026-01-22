@@ -21,6 +21,34 @@ const io = new Server(server, {
 // Make io accessible to our router
 app.set('socketio', io);
 
+// MQTT Client Integration
+const mqttClient = require('./lib/mqttClient');
+
+// Subscribe to readings
+mqttClient.on('connect', () => {
+    mqttClient.subscribe('plantcare/readings', (err) => {
+        if (!err) console.log("Server: Subscribed to plantcare/readings");
+    });
+});
+
+// Handle incoming MQTT messages
+mqttClient.on('message', (topic, message) => {
+    if (topic === 'plantcare/readings') {
+        try {
+            const payload = JSON.parse(message.toString());
+
+            // Broadcast to frontend via Socket.IO
+            io.emit('new_reading', payload);
+
+            if (payload.updateType === 'threshold') {
+                console.log(`Socket Broadcast: Threshold Confirmation for ${payload.deviceId}: ${payload.threshold}%`);
+            }
+        } catch (e) {
+            console.error("Error processing MQTT message:", e);
+        }
+    }
+});
+
 io.on('connection', (socket) => {
     console.log('New client connected:', socket.id);
     socket.on('disconnect', () => {

@@ -22,6 +22,7 @@ public:
     // Accessors for state
     bool isTankEmptyAlert() { return isTankEmpty; }
     bool isSystemLocked() { return isSafetyLocked; }
+    const char* getLastStatus() { return lastStatusMessage.c_str(); }
     void resetAlerts() { isTankEmpty = false; tankFailureCount = 0; isSafetyLocked = false; }
 
 private:
@@ -48,6 +49,7 @@ private:
     bool isSafetyLocked = false;
     int tankFailureCount = 0;
     int startSessionMoisture = 0; // Snapshot before watering
+    String lastStatusMessage = "Idle"; // Status message for reporting
 
     bool isWateringWindow(); // Renamed from isDaytime
     int getDayOfYear();

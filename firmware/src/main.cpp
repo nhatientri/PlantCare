@@ -80,6 +80,7 @@ void loop() {
   doc["pumpState"] = pumpState;
   doc["threshold"] = wateringThreshold;
   doc["tankEmpty"] = controller.isTankEmptyAlert();
+  doc["status"] = controller.getLastStatus();
 
   JsonArray plantsArray = doc["plants"].to<JsonArray>();
   for (int i = 0; i < NUM_PLANTS; i++) {

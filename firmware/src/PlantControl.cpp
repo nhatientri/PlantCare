@@ -64,35 +64,41 @@ bool PlantControl::processAutoWatering(bool moistureNeedsWatering, int currentAv
                  // 0. Safety Lock Check
                  if (isSafetyLocked) {
                      Serial.println("Safety Block: SYSTEM LOCKED by AI. Skipping.");
+                     lastStatusMessage = "AI Lockout";
                      return false;
                  }
                  
                 // 1. Safety Check: Too Wet?
                 if (!isSafeToWater) {
                     Serial.println("Safety Block: One or more plants are TOO WET. Skipping.");
+                    lastStatusMessage = "Safety: Too Wet";
                     return false;
                 }
 
                 // 2. Safety Check: Tank Empty?
                 if (isTankEmpty) {
                     Serial.println("Alert: TANK EMPTY. Auto-watering blocked.");
+                    lastStatusMessage = "Tank Empty!";
                     return false;
                 }
 
                 // 3. Time Window Check
                 if (!isWateringWindow()) {
                      Serial.println("Need water, but outside Optimal Hours. Skipping.");
+                     lastStatusMessage = "Outside Hours (6-9, 17-20)";
                      return false;
                 }
                 
                 // 4. Daily Limit Check
                 if (dailyWateringCount >= MAX_DAILY_CYCLES) {
                      Serial.println("Need water, but DAILY LIMIT reached. Skipping.");
+                     lastStatusMessage = "Daily Limit Reached";
                      return false;
                 }
 
                 // Start Watering Session
                 Serial.println("Starting Watering Session (Burst 1)");
+                lastStatusMessage = "Watering";
                 digitalWrite(PUMP_PIN, HIGH);
                 currentState = WATERING;
                 stateStartTime = now;
@@ -112,6 +118,7 @@ bool PlantControl::processAutoWatering(bool moistureNeedsWatering, int currentAv
                 digitalWrite(PUMP_PIN, LOW);
                 currentState = SOAKING;
                 stateStartTime = now;
+                lastStatusMessage = "Soaking";
                 return false; 
             }
             return true; // Pump is still running

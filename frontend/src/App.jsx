@@ -140,6 +140,10 @@ function App() {
       return;
     }
 
+    // Optimistic Update UI (Don't wait for server)
+    // TODO: Add visual toast
+    console.log(`Sending Threshold: ${val}`);
+
     try {
       await fetch(`${API_URL}/api/commands`, {
         method: 'POST',
@@ -149,9 +153,10 @@ function App() {
         },
         body: JSON.stringify({ deviceId, command: `SET_THRESHOLD:${val}` })
       });
-      alert(`Threshold updated to ${val}%. Device will update internally.`);
+      // Removing blocking alert. 
+      // The socket update will eventually confirm it. 
     } catch (e) {
-      alert("Failed to update threshold");
+      console.error("Failed to update threshold", e);
     }
   };
 

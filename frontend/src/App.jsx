@@ -12,6 +12,7 @@ function App() {
   const [groupedData, setGroupedData] = useState({});
   const [wateringStates, setWateringStates] = useState({}); // { deviceId: boolean }
   const [showRegister, setShowRegister] = useState(false);
+  const [pendingThresholds, setPendingThresholds] = useState({}); // { deviceId: { val: 50, sentAt: 123 } }
 
   // Device Claiming State
   const [claimId, setClaimId] = useState('');
@@ -86,6 +87,29 @@ function App() {
     }
   };
 
+  // Reconciliation Effect: Check if pending thresholds are confirmed or timed out
+  useEffect(() => {
+    const now = Date.now();
+    setPendingThresholds(prev => {
+      const next = { ...prev };
+      let changed = false;
+      Object.keys(next).forEach(did => {
+        // 1. Check if backend confirms it
+        if (groupedData[did] && groupedData[did].threshold === next[did].val) {
+          delete next[did];
+          changed = true;
+        }
+        // 2. Check timeout (10 seconds)
+        else if (now - next[did].sentAt > 10000) {
+          console.warn(`Threshold sync timed out for ${did}`);
+          delete next[did];
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [groupedData]);
+
   const handleWaterNow = async (deviceId) => {
     try {
       setWateringStates(prev => ({ ...prev, [deviceId]: true }));
@@ -119,6 +143,12 @@ function App() {
   const handleUpdateThreshold = async (deviceId, newVal) => {
     console.log(`Sending Threshold: ${newVal}`);
 
+    // Set Pending State (Optimistic UI)
+    setPendingThresholds(prev => ({
+      ...prev,
+      [deviceId]: { val: newVal, sentAt: Date.now() }
+    }));
+
     try {
       const res = await fetch(`${API_URL}/api/commands`, {
         method: 'POST',
@@ -134,16 +164,15 @@ function App() {
         throw new Error(errData.error || 'Failed to update threshold');
       }
 
-      // Update local state immediately for responsiveness 
-      // (The socket will confirm it later)
-      setGroupedData(prev => ({
-        ...prev,
-        [deviceId]: { ...prev[deviceId], threshold: newVal }
-      }));
-
     } catch (e) {
       console.error("Failed to update threshold", e);
       alert(`Update Failed: ${e.message}`);
+      // Revert pending state on error
+      setPendingThresholds(prev => {
+        const next = { ...prev };
+        delete next[deviceId];
+        return next;
+      });
     }
   };
 
@@ -396,7 +425,8 @@ function App() {
 
               {/* 1. Threshold Control Card (NEW) */}
               <ThresholdControl
-                currentThreshold={latestreading.threshold || 30}
+                currentThreshold={pendingThresholds[deviceId] ? pendingThresholds[deviceId].val : (latestreading.threshold || 30)}
+                isSyncing={!!pendingThresholds[deviceId]}
                 onUpdate={(val) => handleUpdateThreshold(deviceId, val)}
               />
 

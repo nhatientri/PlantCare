@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -32,7 +33,7 @@ mqttClient.on('connect', () => {
 });
 
 // Handle incoming MQTT messages
-mqttClient.on('message', (topic, message) => {
+mqttClient.on('message', async (topic, message) => {
     if (topic === 'plantcare/readings') {
         try {
             const payload = JSON.parse(message.toString());
@@ -47,6 +48,9 @@ mqttClient.on('message', (topic, message) => {
                 console.warn("Ignored MQTT message with missing device_id");
                 return;
             }
+
+            // Auto-Register Device if it doesn't exist
+            await registerDeviceIfNeeded(payload.device_id);
 
             // Add timestamp if missing (critical for frontend "Online" check)
             if (!payload.timestamp) {
@@ -69,6 +73,22 @@ mqttClient.on('message', (topic, message) => {
         }
     }
 });
+
+const registerDeviceIfNeeded = async (deviceId) => {
+    try {
+        const db = require('./database');
+        const res = await db.query('SELECT 1 FROM devices WHERE device_id = $1', [deviceId]);
+        if (res.rows.length === 0) {
+            await db.query(
+                'INSERT INTO devices (device_id, secret, name) VALUES ($1, $2, $3)',
+                [deviceId, 'admin', 'New Device']
+            );
+            console.log(`Auto-registered new device: ${deviceId}`);
+        }
+    } catch (e) {
+        console.error("Auto-register failed:", e);
+    }
+};
 
 // Helper to save threshold update to DB so it persists even if HTTP POST fails
 const saveThresholdToDb = async (deviceId, threshold) => {

@@ -251,6 +251,7 @@ function App() {
 
       newSocket.on('new_reading', (reading) => {
         console.log("New Reading Socket:", reading);
+        console.log(`Socket update for ${reading.device_id}. Threshold: ${reading.threshold}`);
 
         // Update Grouped Data (Latest State)
         setGroupedData(prev => {

@@ -1,39 +1,73 @@
 #include "SensorManager.h"
 
-SensorManager::SensorManager(int pin, int airValue, int waterValue) 
-    : _pin(pin), _airValue(airValue), _waterValue(waterValue) {
+SensorManager::SensorManager() : dht(DHTPIN, DHTTYPE) {
+    for (int pin : SOIL_PINS) {
+        sensorPins.push_back(pin);
+        currentReadings.push_back({pin, 0, 0});
+        snapshotReadings.push_back({pin, 0, 0});
+    }
 }
 
 void SensorManager::begin() {
-    pinMode(_pin, INPUT);
+    dht.begin();
+    for (int pin : sensorPins) {
+        pinMode(pin, INPUT);
+    }
 }
 
-int SensorManager::getRaw() {
-    return analogRead(_pin);
+void SensorManager::update() {
+    for (int i = 0; i < sensorPins.size(); i++) {
+        int raw = 0;
+        int pct = readSensor(sensorPins[i], raw);
+        currentReadings[i] = {sensorPins[i], raw, pct};
+    }
 }
 
-int SensorManager::getMoisturePercentage() {
-    int raw = getRaw();
-    
-    // Constrain the raw value to the calibration (inverted logic: Air is high, Water is low)
-    int constrainedRaw = constrain(raw, _waterValue, _airValue);
-    
-    // Map to 0-100%
-    int percent = map(constrainedRaw, _airValue, _waterValue, 0, 100);
-    
-    return percent;
+int SensorManager::readSensor(int pin, int& rawArg) {
+    int raw = analogRead(pin);
+    rawArg = raw;
+    // Map raw to 0-100%
+    int percent = map(raw, AIR_VALUE, WATER_VALUE, 0, 100);
+    return constrain(percent, 0, 100);
 }
 
-bool SensorManager::isHealthy() {
-    int raw = getRaw();
-    // Simple check: if reading is absolute 0 or 4095 (and not calibrated close to it), 
-    // it *might* be an error. For reliability, we use a Safe Range.
-    // 4095 is default floating for some pins or max voltage, but in air it's close to 4095.
-    // Let's define "Healthy" as "Within reasonable physical limits".
-    // 0 is usually ground short.
-    if (raw < 100) return false; // Likely Short
-    // Note: Open circuit on ESP32 often floats. 
-    // We assume 4095 is "Dry Air" which is valid.
-    // A specific "Disconnected" check might require pull-down resistors.
-    return true;
+float SensorManager::getAverageMoisture() {
+    long sum = 0;
+    for (auto& val : currentReadings) {
+        sum += val.percent;
+    }
+    return (float)sum / sensorPins.size();
+}
+
+std::vector<SensorDetail> SensorManager::getReadings() {
+    return currentReadings;
+}
+
+DHTReading SensorManager::getDHT() {
+    DHTReading reading;
+    reading.temperature = dht.readTemperature();
+    reading.humidity = dht.readHumidity();
+    return reading;
+}
+
+void SensorManager::snapshotMoisture() {
+    // Copy current readings to snapshot
+    snapshotReadings = currentReadings;
+}
+
+std::vector<bool> SensorManager::validateRise(int riseThreshold) {
+    std::vector<bool> results;
+    for (int i = 0; i < sensorPins.size(); i++) {
+        int delta = currentReadings[i].percent - snapshotReadings[i].percent;
+        results.push_back(delta >= riseThreshold);
+    }
+    return results;
+}
+
+bool SensorManager::checkTankEmpty(const std::vector<bool>& validationResults) {
+    // If ALL sensors failed to rise, assume tank is empty
+    for (bool rise : validationResults) {
+        if (rise) return false; // At least one sensor rose, so tank is NOT empty
+    }
+    return true; // None rose
 }

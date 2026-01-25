@@ -1,83 +1,171 @@
 #include "PlantControl.h"
-#include "states/IdleState.h" 
 
-PlantControl::PlantControl(SensorManager* sensor, PumpController* pump, DHTManager* dht) 
-    : _sensor(sensor), _pump(pump), _dht(dht), _currentState(nullptr), _lastMoisture(0) {
-    
-    // Default will be overwritten by begin() if preferences exist
-    _moistureThreshold = DEFAULT_MOISTURE_THRESHOLD;
+PlantControl::PlantControl(SensorManager* s, NetworkManager* n, ConfigManager* c) {
+    sensors = s;
+    network = n;
+    config = c;
+    currentState = IDLE;
 }
 
 void PlantControl::begin() {
-    _sensor->begin();
-    _pump->begin();
-    _dht->begin();
-    
-    // Load Settings
-    _preferences.begin("plantcare", false); // Namespace "plantcare", Read/Write mode
-    _moistureThreshold = _preferences.getInt("threshold", DEFAULT_MOISTURE_THRESHOLD);
-    Serial.print("Loaded Threshold from Flash: ");
-    Serial.println(_moistureThreshold);
-    _preferences.end();
-    
-    // Initial State
-    changeState(new IdleState());
+    pinMode(PUMP_PIN, OUTPUT);
+    turnPump(false);
+}
+
+void PlantControl::setState(State newState) {
+    currentState = newState;
+    stateStartTime = millis();
+    broadcastStatus();
+}
+
+void PlantControl::turnPump(bool on) {
+    digitalWrite(PUMP_PIN, on ? HIGH : LOW);
+    // If relay is active low, invert this. Assuming Active High for now.
 }
 
 void PlantControl::update() {
-    _pump->update(); // Safety check
+    unsigned long elapsed = millis() - stateStartTime;
+
+    switch (currentState) {
+        case IDLE:
+            // Check sensors periodically (e.g. every 5 seconds) or every loop
+            // For checking threshold:
+            {
+                // Simple hygiene check interval could be added here
+                if (elapsed > 5000) { 
+                    sensors->update();
+                    float avg = sensors->getAverageMoisture();
+                    int threshold = config->loadThreshold();
+                    
+                    if (avg < threshold) {
+                         // Check Time: Morning (6-10) OR Afternoon (16-19)
+                         int h = network->getHour();
+                         bool isMorning = (h >= 6 && h < 10);
+                         bool isAfternoon = (h >= 16 && h < 19);
+                         
+                         if (isMorning || isAfternoon) {
+                             // Snapshot usage for validation logic later
+                             sensors->snapshotMoisture();
+                             setState(WATERING);
+                         } else {
+                             // Restricted time
+                             if (elapsed > 3600000) { // Log once an hour
+                                 char msg[64];
+                                 snprintf(msg, sizeof(msg), "Skipping water (Values: %.1f%%). Time: %02d:00", avg, h);
+                                 network->publish("plantcare/log", msg);
+                                 stateStartTime = millis(); 
+                             }
+                         }
+                    }
+                    // Reset timer to avoid flooding logs/checks if we were just idle
+                    if (currentState == IDLE) { // Only reset if we didn't switch state
+                         stateStartTime = millis(); 
+                         broadcastStatus(); 
+                    }
+                }
+            }
+            break;
+
+        case WATERING:
+            turnPump(true);
+            if (elapsed >= WATERING_DURATION) {
+                turnPump(false);
+                setState(SOAKING);
+            }
+            break;
+
+        case SOAKING:
+            if (elapsed >= SOAK_DURATION) {
+                // End of soak. Check results.
+                sensors->update();
+                std::vector<bool> results = sensors->validateRise(RISE_THRESHOLD);
+                bool tankEmpty = sensors->checkTankEmpty(results);
+
+                if (tankEmpty) {
+                    strcpy(failMessage, "Tank Empty / Pump Failure");
+                    setState(ERROR_TANK_EMPTY);
+                } else {
+                    // Check for individual faulty sensors
+                    bool anyFault = false;
+                    for (int i = 0; i < results.size(); i++) {
+                        if (!results[i]) {
+                             anyFault = true;
+                             // Log specific sensor fault logic here or send MQTT alert
+                             String msg = "Warning: Sensor " + String(i) + " did not respond to watering.";
+                             network->publishDevice("alert", msg.c_str());
+                        }
+                    }
+
+                    // Decide if we need more water or back to IDLE
+                    float avg = sensors->getAverageMoisture();
+                    if (avg < config->loadThreshold()) {
+                         // Need more water, but ensure we don't loop forever if tank is empty behavior matches but sensors are just weird.
+                         // For now, loop back to WATERING
+                         sensors->snapshotMoisture(); // New snapshot
+                         setState(WATERING);
+                    } else {
+                         setState(IDLE);
+                    }
+                }
+            }
+            break;
+
+        case ERROR_TANK_EMPTY:
+        case ERROR_SENSOR_FAULT:
+            // Stay here until reset
+            // Maybe blink LED
+            if (elapsed > 3600000) { // 1 Hour
+                 network->publishDevice("alert", failMessage);
+                 stateStartTime = millis(); // Resend alert every hour
+            }
+            break;
+    }
+}
+
+void PlantControl::broadcastStatus() {
+    // Build JSON
+    JsonDocument doc;
+    doc["device_id"] = DEVICE_ID;
+    doc["state"] = currentState;
+    doc["moisture"] = sensors->getAverageMoisture();
     
-    if (_currentState) {
-        _currentState->update(this);
+    // Add individual values (backward compatibility)
+    JsonArray peaks = doc["sensors"].to<JsonArray>();
+    std::vector<SensorDetail> readings = sensors->getReadings();
+    for(auto& val : readings) peaks.add(val.percent);
+
+    // Add detailed debug info
+    JsonArray details = doc["sensor_details"].to<JsonArray>();
+    for(auto& val : readings) {
+        JsonObject d = details.add<JsonObject>();
+        d["pin"] = val.pin;
+        d["adc"] = val.raw;
+        d["pct"] = val.percent;
     }
+
+    DHTReading dht = sensors->getDHT();
+    doc["temp"] = dht.temperature;
+    doc["humidity"] = dht.humidity;
+
+    char buffer[512];
+    serializeJson(doc, buffer);
+    network->publishDevice("status", buffer);
 }
 
-void PlantControl::changeState(PlantState* newState) {
-    if (_currentState) {
-        _currentState->exit(this);
-        delete _currentState; 
+void PlantControl::processCommand(const char* topic, const char* payload) {
+    char cmdTopic[50];
+    network->getDeviceTopic("cmd", cmdTopic, sizeof(cmdTopic));
+
+    if (strcmp(topic, cmdTopic) == 0) {
+        if (strncmp(payload, "PUMP_ON", 7) == 0) {
+            sensors->snapshotMoisture(); // Snapshot before manual run
+            setState(WATERING); // Manual trigger
+        } else if (strncmp(payload, "RESET", 5) == 0) {
+            setState(IDLE);
+        } else if (strncmp(payload, "SET_THRESHOLD:", 14) == 0) {
+            int newThresh = atoi(payload + 14);
+            config->saveThreshold(newThresh);
+            network->publish("plantcare/log", "Threshold updated");
+        }
     }
-    
-    _currentState = newState;
-    
-    if (_currentState) {
-        _currentState->enter(this);
-    }
-}
-
-SensorManager* PlantControl::getSensor() {
-    return _sensor;
-}
-
-PumpController* PlantControl::getPump() {
-    return _pump;
-}
-
-DHTManager* PlantControl::getDHT() {
-    return _dht;
-}
-
-void PlantControl::setMoistureThreshold(int threshold) {
-    if (threshold >= 0 && threshold <= 100) {
-        _moistureThreshold = threshold;
-        
-        _preferences.begin("plantcare", false);
-        _preferences.putInt("threshold", _moistureThreshold);
-        _preferences.end();
-        
-        Serial.print("Threshold updated and saved to: ");
-        Serial.println(_moistureThreshold);
-    }
-}
-
-int PlantControl::getMoistureThreshold() {
-    return _moistureThreshold;
-}
-
-void PlantControl::setLastMoisture(int value) {
-    _lastMoisture = value;
-}
-
-int PlantControl::getLastMoisture() {
-    return _lastMoisture;
 }

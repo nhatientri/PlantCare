@@ -10,7 +10,7 @@
 
 // Soil Sensor Pins (ADC)
 const int SOIL_PINS[] = {32, 34}; 
-const int NUM_SENSORS = 2;
+// NUM_SENSORS is now dynamic based on SOIL_PINS array size calculated in cpp
 
 struct SensorDetail {
     int pin;
@@ -30,11 +30,16 @@ private:
     std::vector<SensorDetail> currentReadings; // calibrated %
     std::vector<SensorDetail> snapshotReadings; // for rise validation
 
-    // Calibration constants (can be moved to ConfigManager later)
-    const int AIR_VALUE = 1700;
-    const int WATER_VALUE = 700;
+    // Cache
+    DHTReading cachedDHT = {0, 0};
+    unsigned long lastDHTReadTime = 0;
 
-    int readSensor(int pin, int& rawArg);
+    // Calibration constants (can be moved to ConfigManager later)
+    // Calibration Values (Dynamic)
+    std::vector<int> airValues; 
+    std::vector<int> waterValues;
+
+    int readSensor(int index, int pin, int& rawArg);
 
 public:
     SensorManager();
@@ -50,6 +55,11 @@ public:
     // Returns map where key is index, value is boolean (true = rose/OK, false = no rise)
     std::vector<bool> validateRise(int riseThreshold);
     bool checkTankEmpty(const std::vector<bool>& validationResults);
+
+    // Dynamic Calibration
+    void setCalibration(int index, int air, int water);
+    int getAirValue(int index);
+    int getWaterValue(int index);
 };
 
 #endif

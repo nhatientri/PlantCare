@@ -44,6 +44,10 @@ void setup() {
 void loop() {
     // Update all components
     networkManager.loop();
-    sensorManager.update();
-    plantControl.update();
+
+    // If OTA is running, skip other tasks to ensure timing
+    if (!networkManager.isOTA()) {
+        sensorManager.update();
+        plantControl.update();
+    }
 }

@@ -8,6 +8,10 @@ class ConfigManager {
 private:
     Preferences preferences;
     const char* NAMESPACE = "plantcare";
+    // Default calibration values if not set
+    // Using widely safe defaults: 1700 (Air), 700 (Water)
+    const int DEFAULT_AIR = 1700;
+    const int DEFAULT_WATER = 700;
 
 public:
     void begin();
@@ -15,11 +19,21 @@ public:
     int loadThreshold();
     void saveThreshold(int threshold);
     
+    // Calibration for 2 sensors
+    int loadAirValue(int index);
+    void saveAirValue(int index, int value);
+    
+    int loadWaterValue(int index);
+    void saveWaterValue(int index, int value);
+    
     String loadMqttServer();
     void saveMqttServer(String server);
     
     int loadMqttPort();
     void saveMqttPort(int port);
+
+    String loadPassword();
+    void savePassword(String password);
 };
 
 #endif

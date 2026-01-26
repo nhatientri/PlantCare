@@ -26,6 +26,7 @@ private:
     unsigned long stateStartTime;
     const unsigned long WATERING_DURATION = 2000; // 2 seconds
     const unsigned long SOAK_DURATION = 30000;    // 30 seconds
+    const unsigned long CHECK_INTERVAL = 1000 * 30; // 30 mins
     const int RISE_THRESHOLD = 2; // 2% rise expected
 
     char failMessage[100];

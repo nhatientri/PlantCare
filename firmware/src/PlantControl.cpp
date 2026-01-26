@@ -10,6 +10,16 @@ PlantControl::PlantControl(SensorManager* s, NetworkManager* n, ConfigManager* c
 void PlantControl::begin() {
     pinMode(PUMP_PIN, OUTPUT);
     turnPump(false);
+    
+    // Load calibration from Config
+    // We can't know size easily without getting readings first or exposing size.
+    // Let's assume SensorManager is initialized.
+    std::vector<SensorDetail> readings = sensors->getReadings();
+    for(int i=0; i<readings.size(); i++) {
+        int air = config->loadAirValue(i);
+        int water = config->loadWaterValue(i);
+        sensors->setCalibration(i, air, water);
+    }
 }
 
 void PlantControl::setState(State newState) {
@@ -32,7 +42,7 @@ void PlantControl::update() {
             // For checking threshold:
             {
                 // Simple hygiene check interval could be added here
-                if (elapsed > 5000) { 
+                if (elapsed > CHECK_INTERVAL) { 
                     sensors->update();
                     float avg = sensors->getAverageMoisture();
                     int threshold = config->loadThreshold();
@@ -136,16 +146,31 @@ void PlantControl::broadcastStatus() {
 
     // Add detailed debug info
     JsonArray details = doc["sensor_details"].to<JsonArray>();
-    for(auto& val : readings) {
+    for(int i=0; i<readings.size(); i++) {
+        SensorDetail& val = readings[i];
         JsonObject d = details.add<JsonObject>();
         d["pin"] = val.pin;
         d["adc"] = val.raw;
         d["pct"] = val.percent;
+        d["air_cal"] = sensors->getAirValue(i);
+        d["water_cal"] = sensors->getWaterValue(i);
+    }
+    
+    // Explicit array for calibration (more robust)
+    JsonArray cal = doc["calibration"].to<JsonArray>();
+    for(int i=0; i<readings.size(); i++) {
+        JsonObject c = cal.add<JsonObject>();
+        c["index"] = i;
+        c["air"] = sensors->getAirValue(i);
+        c["water"] = sensors->getWaterValue(i);
     }
 
     DHTReading dht = sensors->getDHT();
     doc["temp"] = dht.temperature;
     doc["humidity"] = dht.humidity;
+    doc["claim_pass"] = config->loadPassword(); // For claiming
+    doc["threshold"] = config->loadThreshold();
+    doc["rssi"] = WiFi.RSSI();
 
     char buffer[512];
     serializeJson(doc, buffer);
@@ -166,6 +191,17 @@ void PlantControl::processCommand(const char* topic, const char* payload) {
             int newThresh = atoi(payload + 14);
             config->saveThreshold(newThresh);
             network->publish("plantcare/log", "Threshold updated");
+            broadcastStatus(); // Confirm change to frontend immediately
+        } else if (strncmp(payload, "SET_CALIBRATION_VALUES:", 23) == 0) {
+             // Format: SET_CALIBRATION_VALUES:index:air:water
+             int idx, air, water;
+             if (sscanf(payload, "SET_CALIBRATION_VALUES:%d:%d:%d", &idx, &air, &water) == 3) {
+                 sensors->setCalibration(idx, air, water);
+                 config->saveAirValue(idx, air);
+                 config->saveWaterValue(idx, water);
+                 network->publish("plantcare/log", "Calibration updated");
+                 broadcastStatus();
+             }
         }
     }
 }

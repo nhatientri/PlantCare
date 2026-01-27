@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { Plus, X } from 'lucide-react'
 
+import { BACKEND_URL } from './constants'
+
 export default function ClaimDevice({ userId, onClaimed, onClose }) {
     const [deviceId, setDeviceId] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [success, setSuccess] = useState(false)
-
-    const BACKEND_URL = 'http://localhost:3000'
 
     const handleClaim = async (e) => {
         e.preventDefault()

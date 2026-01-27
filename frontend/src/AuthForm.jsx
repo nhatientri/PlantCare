@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Sprout } from 'lucide-react'
+import { BACKEND_URL } from './constants'
 
 export default function AuthForm({ onLogin }) {
     const [isRegister, setIsRegister] = useState(false)
@@ -8,7 +9,7 @@ export default function AuthForm({ onLogin }) {
     const [confirmPassword, setConfirmPassword] = useState('')
     const [error, setError] = useState('')
 
-    const BACKEND_URL = 'http://localhost:3000'
+
 
     const handleSubmit = async (e) => {
         e.preventDefault()

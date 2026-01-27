@@ -1,209 +1,261 @@
 #include "PlantControl.h"
 
-PlantControl::PlantControl() {
+PlantControl::PlantControl(SensorManager* s, NetworkManager* n, ConfigManager* c) {
+    sensors = s;
+    network = n;
+    config = c;
+    currentState = IDLE;
 }
 
-void PlantControl::setup() {
+void PlantControl::begin() {
     pinMode(PUMP_PIN, OUTPUT);
-    digitalWrite(PUMP_PIN, LOW);
+    turnPump(false);
     
-    // Initialize time config
-    configTime(GMT_OFFSET_SEC, DST_OFFSET_SEC, NTP_SERVER);
+    // Load calibration from Config
+    // We can't know size easily without getting readings first or exposing size.
+    // Let's assume SensorManager is initialized.
+    std::vector<SensorDetail> readings = sensors->getReadings();
+    for(int i=0; i<readings.size(); i++) {
+        int air = config->loadAirValue(i);
+        int water = config->loadWaterValue(i);
+        sensors->setCalibration(i, air, water);
+    }
 }
 
-void PlantControl::syncTime() {
-    // This is handled automatically by esp32 background tasks once configTime is called,
-    // but we can add manual sync checks here if needed.
+void PlantControl::setState(State newState) {
+    currentState = newState;
+    stateStartTime = millis();
+    broadcastStatus();
 }
 
-bool PlantControl::isWateringWindow() {
-    struct tm timeinfo;
-    if (!getLocalTime(&timeinfo)) {
-        Serial.println("Time sync failed, assuming safe mode (Window=TRUE)");
-        return true; 
-    }
-    
-    int h = timeinfo.tm_hour;
-    // Morning: 6-9, Evening: 17-20
-    if ((h >= 6 && h < 9) || (h >= 17 && h < 20)) {
-        return true;
-    }
-    return false;
+void PlantControl::turnPump(bool on) {
+    digitalWrite(PUMP_PIN, on ? HIGH : LOW);
+    // If relay is active low, invert this. Assuming Active High for now.
 }
 
-// Helper to get day of year for daily limit tracking
-int PlantControl::getDayOfYear() {
-    struct tm timeinfo;
-    if (!getLocalTime(&timeinfo)) return -1;
-    return timeinfo.tm_yday;
-}
+void PlantControl::update() {
+    unsigned long elapsed = millis() - stateStartTime;
 
-bool PlantControl::processAutoWatering(bool moistureNeedsWatering, int currentAvgMoisture, bool isSafeToWater) {
-    unsigned long now = millis();
-    
-    // Daily Limit Reset
-    int day = getDayOfYear();
-    if (day != -1 && day != currentDay) {
-        currentDay = day;
-        dailyWateringCount = 0;
-        Serial.println("New Day: Resetting daily watering count.");
-    }
-
-    // Auto-Recovery Check (Always runs): 
-    // If water level ROSE significantly manually or by luck, clear error
-    if (isTankEmpty) {
-       // We can't really check "Session Start" here easily if we aren't in a session.
-       // But if we see moisture is GOOD (not needing water), maybe we clear it?
-       // OR: The user requested comparison. Let's do it inside the SOAK check.
-    }
-
-    // State Machine
     switch (currentState) {
         case IDLE:
-            if (moistureNeedsWatering) {
-                 // 0. Safety Lock Check
-                 if (isSafetyLocked) {
-                     Serial.println("Safety Block: SYSTEM LOCKED by AI. Skipping.");
-                     lastStatusMessage = "AI Lockout";
-                     return false;
-                 }
-                 
-                // 1. Safety Check: Too Wet?
-                if (!isSafeToWater) {
-                    Serial.println("Safety Block: One or more plants are TOO WET. Skipping.");
-                    lastStatusMessage = "Safety: Too Wet";
-                    return false;
-                }
+            // Check sensors periodically (e.g. every 5 seconds) or every loop
+            // For checking threshold:
+            {
+                // Simple hygiene check interval could be added here
+                if (elapsed > CHECK_INTERVAL) { 
+                    sensors->update();
+                    float avg = sensors->getAverageMoisture();
+                    int threshold = config->loadThreshold();
+                    
+                    if (avg < threshold) {
+                         // Check Time: Morning (6-10) OR Afternoon (16-19)
+                         int h = network->getHour();
+                         int mStart = config->loadMorningStart();
+                         int mEnd = config->loadMorningEnd();
+                         int aStart = config->loadAfternoonStart();
+                         int aEnd = config->loadAfternoonEnd();
 
-                // 2. Safety Check: Tank Empty?
-                if (isTankEmpty) {
-                    Serial.println("Alert: TANK EMPTY. Auto-watering blocked.");
-                    lastStatusMessage = "Tank Empty!";
-                    return false;
-                }
+                         bool isMorning = (h >= mStart && h < mEnd);
+                         bool isAfternoon = (h >= aStart && h < aEnd);
+                         
+                         if (isMorning || isAfternoon) {
+                             // Check Moisture based on Mode
+                             int mode = config->loadTriggerMode();
+                             bool thirsty = false;
+                             
+                             std::vector<SensorDetail> readings = sensors->getReadings();
+                             int threshold = config->loadThreshold();
 
-                // 3. Time Window Check
-                if (!isWateringWindow()) {
-                     Serial.println("Need water, but outside Optimal Hours. Skipping.");
-                     lastStatusMessage = "Outside Hours (6-9, 17-20)";
-                     return false;
-                }
-                
-                // 4. Daily Limit Check
-                if (dailyWateringCount >= MAX_DAILY_CYCLES) {
-                     Serial.println("Need water, but DAILY LIMIT reached. Skipping.");
-                     lastStatusMessage = "Daily Limit Reached";
-                     return false;
-                }
+                             if (mode == 1) { // ANY
+                                 for(auto& r : readings) {
+                                     if(r.percent < threshold) { thirsty = true; break; }
+                                 }
+                             } else if (mode == 2) { // ALL
+                                 thirsty = true;
+                                 for(auto& r : readings) {
+                                     if(r.percent >= threshold) { thirsty = false; break; }
+                                 }
+                             } else { // AVG (Default)
+                                 if (avg < threshold) thirsty = true;
+                             }
 
-                // Start Watering Session
-                Serial.println("Starting Watering Session (Burst 1)");
-                lastStatusMessage = "Watering";
-                digitalWrite(PUMP_PIN, HIGH);
-                currentState = WATERING;
-                stateStartTime = now;
-                currentSessionCycles = 1;
-                dailyWateringCount++;
-                
-                // Capture baseline for Tank Check
-                startSessionMoisture = currentAvgMoisture;
-                return true;
+                             if (thirsty) {
+                                 // Snapshot usage for validation logic later
+                                 sensors->snapshotMoisture();
+                                 setState(WATERING);
+                             }
+                         } else {
+                             // Restricted time
+                             if (elapsed > 3600000) { // Log once an hour
+                                 char msg[64];
+                                 snprintf(msg, sizeof(msg), "Skipping water (Values: %.1f%%). Time: %02d:00", avg, h);
+                                 network->publish("plantcare/log", msg);
+                                 stateStartTime = millis(); 
+                             }
+                         }
+                    }
+                    // Reset timer to avoid flooding logs/checks if we were just idle
+                    if (currentState == IDLE) { // Only reset if we didn't switch state
+                         stateStartTime = millis(); 
+                         broadcastStatus(); 
+                    }
+                }
             }
             break;
 
         case WATERING:
-            // Pump is ON. Check if burst time is over.
-            if (now - stateStartTime >= PUMP_BURST_MS) {
-                Serial.println("Burst finished. Turning Pump OFF. Starting Soak.");
-                digitalWrite(PUMP_PIN, LOW);
-                currentState = SOAKING;
-                stateStartTime = now;
-                lastStatusMessage = "Soaking";
-                return false; 
+            turnPump(true);
+            if (elapsed >= WATERING_DURATION) {
+                turnPump(false);
+                setState(SOAKING);
             }
-            return true; // Pump is still running
+            break;
 
         case SOAKING:
-            // Pump is OFF. Waiting for water to soak in.
-            if (now - stateStartTime >= PUMP_SOAK_MS) {
-                // Soak finished. 
-                
-                // --- Tank Empty / Recovery Logic ---
-                int rise = currentAvgMoisture - startSessionMoisture;
-                Serial.printf("Soak Complete. Moisture Rise: %d%%\n", rise);
-                
-                if (rise >= MOISTURE_RECOVERY_RISE) {
-                    if (isTankEmpty) {
-                        Serial.println("Auto-Recovery: Moisture rose! Clearing Tank Empty alert.");
-                        isTankEmpty = false; 
-                        tankFailureCount = 0;
-                    }
-                } else if (rise < TANK_CHECK_TOLERANCE) {
-                    // It didn't go up. Possible empty tank.
-                    tankFailureCount++;
-                    Serial.printf("Warning: Moisture didn't rise. Failure Count: %d\n", tankFailureCount);
-                    if (tankFailureCount >= MAX_TANK_FAILURES) {
-                        isTankEmpty = true;
-                        Serial.println("CRITICAL: Tank Empty detected!");
-                    }
-                } else {
-                    // It went up a little, assume it's working but maybe slow. Reset failure.
-                    tankFailureCount = 0;
-                }
-                // -----------------------------------
+            if (elapsed >= SOAK_DURATION) {
+                // End of soak. Check results.
+                sensors->update();
+                std::vector<bool> results = sensors->validateRise(RISE_THRESHOLD);
+                bool tankEmpty = sensors->checkTankEmpty(results);
 
-                // Check if we still need water
-                if (moistureNeedsWatering && !isTankEmpty) {
-                    if (currentSessionCycles < MAX_WATERING_CYCLES) {
-                        Serial.printf("Still dry. Starting Burst %d\n", currentSessionCycles + 1);
-                        digitalWrite(PUMP_PIN, HIGH);
-                        currentState = WATERING;
-                        stateStartTime = now;
-                        currentSessionCycles++;
-                        return true;
-                    } else {
-                        Serial.println("Still dry after MAX cycles. Stopping session.");
-                        currentState = IDLE;
-                        return false;
-                    }
+                if (tankEmpty) {
+                    strcpy(failMessage, "Tank Empty / Pump Failure");
+                    setState(ERROR_TANK_EMPTY);
                 } else {
-                    Serial.println("Session complete (Moisture OK or Tank Empty).");
-                    currentState = IDLE;
-                    return false;
+                    // Check for individual faulty sensors
+                    bool anyFault = false;
+                    for (int i = 0; i < results.size(); i++) {
+                        if (!results[i]) {
+                             anyFault = true;
+                             // Log specific sensor fault logic here or send MQTT alert
+                             String msg = "Warning: Sensor " + String(i) + " did not respond to watering.";
+                             network->publishDevice("alert", msg.c_str());
+                        }
+                    }
+
+                    // Decide if we need more water or back to IDLE
+                    float avg = sensors->getAverageMoisture();
+                    if (avg < config->loadThreshold()) {
+                         // Need more water, but ensure we don't loop forever if tank is empty behavior matches but sensors are just weird.
+                         // For now, loop back to WATERING
+                         sensors->snapshotMoisture(); // New snapshot
+                         setState(WATERING);
+                    } else {
+                         setState(IDLE);
+                    }
                 }
             }
             break;
-            
-        case MANUAL_WATERING:
-            if (now - stateStartTime >= 5000) { // 5 Second Safety Limit for Manual
-                Serial.println("Manual Watering Timer Finished. Pump OFF.");
-                digitalWrite(PUMP_PIN, LOW);
-                currentState = IDLE;
-                return false;
+
+        case ERROR_TANK_EMPTY:
+        case ERROR_SENSOR_FAULT:
+            // Stay here until reset
+            // Maybe blink LED
+            if (elapsed > 3600000) { // 1 Hour
+                 network->publishDevice("alert", failMessage);
+                 stateStartTime = millis(); // Resend alert every hour
             }
-            return true; // Pump is ON
+            break;
+    }
+}
+
+void PlantControl::broadcastStatus() {
+    // Build JSON
+    JsonDocument doc;
+    doc["device_id"] = DEVICE_ID;
+    doc["state"] = currentState;
+    doc["moisture"] = sensors->getAverageMoisture();
+    
+    // Add individual values (backward compatibility)
+    JsonArray peaks = doc["sensors"].to<JsonArray>();
+    std::vector<SensorDetail> readings = sensors->getReadings();
+    for(auto& val : readings) peaks.add(val.percent);
+
+    // Add detailed debug info
+    JsonArray details = doc["sensor_details"].to<JsonArray>();
+    for(int i=0; i<readings.size(); i++) {
+        SensorDetail& val = readings[i];
+        JsonObject d = details.add<JsonObject>();
+        d["pin"] = val.pin;
+        d["adc"] = val.raw;
+        d["pct"] = val.percent;
+        d["air_cal"] = sensors->getAirValue(i);
+        d["water_cal"] = sensors->getWaterValue(i);
+    }
+    
+    // Explicit array for calibration (more robust)
+    JsonArray cal = doc["calibration"].to<JsonArray>();
+    for(int i=0; i<readings.size(); i++) {
+        JsonObject c = cal.add<JsonObject>();
+        c["index"] = i;
+        c["air"] = sensors->getAirValue(i);
+        c["water"] = sensors->getWaterValue(i);
     }
 
-    return (currentState == WATERING || currentState == MANUAL_WATERING);
+    DHTReading dht = sensors->getDHT();
+    doc["temp"] = dht.temperature;
+    doc["humidity"] = dht.humidity;
+    // doc["claim_pass"] // REMOVED FOR SECURITY
+    doc["threshold"] = config->loadThreshold();
+    
+    JsonObject windows = doc["windows"].to<JsonObject>();
+    windows["m_start"] = config->loadMorningStart();
+    windows["m_end"] = config->loadMorningEnd();
+    windows["a_start"] = config->loadAfternoonStart();
+    windows["a_end"] = config->loadAfternoonEnd();
+    
+    doc["mode"] = config->loadTriggerMode(); // 0=AVG, 1=ANY, 2=ALL
+
+    doc["rssi"] = WiFi.RSSI();
+
+    char buffer[512];
+    serializeJson(doc, buffer);
+    network->publishDevice("status", buffer);
 }
 
-void PlantControl::startManualWatering() {
-    if (isSafetyLocked) {
-        Serial.println("Manual Watering BLOCKED: System is Locked!");
-        lastStatusMessage = "Blocked: System Locked";
-        return;
+void PlantControl::processCommand(const char* topic, const char* payload) {
+    char cmdTopic[50];
+    network->getDeviceTopic("cmd", cmdTopic, sizeof(cmdTopic));
+
+    if (strcmp(topic, cmdTopic) == 0) {
+        if (strncmp(payload, "PUMP_ON", 7) == 0) {
+            sensors->snapshotMoisture(); // Snapshot before manual run
+            setState(WATERING); // Manual trigger
+        } else if (strncmp(payload, "RESET", 5) == 0) {
+            setState(IDLE);
+        } else if (strncmp(payload, "SET_THRESHOLD:", 14) == 0) {
+            int newThresh = atoi(payload + 14);
+            config->saveThreshold(newThresh);
+            network->publish("plantcare/log", "Threshold updated");
+            broadcastStatus(); // Confirm change to frontend immediately
+        } else if (strncmp(payload, "SET_CALIBRATION_VALUES:", 23) == 0) {
+             // Format: SET_CALIBRATION_VALUES:index:air:water
+             int idx, air, water;
+             if (sscanf(payload, "SET_CALIBRATION_VALUES:%d:%d:%d", &idx, &air, &water) == 3) {
+                 sensors->setCalibration(idx, air, water);
+                 config->saveAirValue(idx, air);
+                 config->saveWaterValue(idx, water);
+                 network->publish("plantcare/log", "Calibration updated");
+                 broadcastStatus();
+             }
+        } else if (strncmp(payload, "SET_TIME_WINDOW:", 16) == 0) {
+             // Format: SET_TIME_WINDOW:mStart:mEnd:aStart:aEnd
+             int mStart, mEnd, aStart, aEnd;
+             if (sscanf(payload, "SET_TIME_WINDOW:%d:%d:%d:%d", &mStart, &mEnd, &aStart, &aEnd) == 4) {
+                 config->saveMorningStart(mStart);
+                 config->saveMorningEnd(mEnd);
+                 config->saveAfternoonStart(aStart);
+                 config->saveAfternoonEnd(aEnd);
+                 
+                 broadcastStatus();
+             }
+        } else if (strncmp(payload, "SET_TRIGGER_MODE:", 17) == 0) {
+            int mode = atoi(payload + 17);
+            if (mode >= 0 && mode <= 2) {
+                config->saveTriggerMode(mode);
+                network->publish("plantcare/log", "Trigger mode updated");
+                broadcastStatus();
+            }
+        }
     }
-    Serial.println("Manual Watering Triggered!");
-    lastStatusMessage = "Manual Watering";
-    digitalWrite(PUMP_PIN, HIGH);
-    currentState = MANUAL_WATERING;
-    stateStartTime = millis();
 }
-
-void PlantControl::turnPumpOff() {
-    digitalWrite(PUMP_PIN, LOW);
-    currentState = IDLE;
-    Serial.println("Pump Force Stopped via helper.");
-}
-
-

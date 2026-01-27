@@ -10,7 +10,13 @@ const server = http.createServer(app);
 initGateway(server); // Sockets
 initMqtt();          // MQTT
 
+const initDb = require('./src/db/init');
+
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Backend Server running on port ${PORT}`);
+
+// Initialize DB first, then start server
+initDb().then(() => {
+    server.listen(PORT, () => {
+        console.log(`Backend Server running on port ${PORT}`);
+    });
 });

@@ -38,9 +38,6 @@ const initDb = async () => {
       await db.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;`);
       await db.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS status VARCHAR(50);`);
       await db.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS config JSONB DEFAULT '{}'::jsonb;`);
-
-      // Cleanup: Remove owner_id
-      await db.query(`ALTER TABLE devices DROP COLUMN IF EXISTS owner_id;`);
     } catch (e) { console.log("Migration check complete."); }
 
     console.log("Created 'devices' table.");
@@ -69,14 +66,21 @@ const initDb = async () => {
     console.log("Created 'user_devices' table.");
 
     // Migrate existing owners to user_devices (Idempotent-ish)
-    // We check if table is empty to avoid duplicates or use ON CONFLICT
-    await db.query(`
-      INSERT INTO user_devices (user_id, device_id, nickname)
-      SELECT owner_id, id, nickname FROM devices 
-      WHERE owner_id IS NOT NULL
-      ON CONFLICT (user_id, device_id) DO NOTHING;
-    `);
-    console.log("Migrated legacy owners to user_devices.");
+    try {
+      await db.query(`
+        INSERT INTO user_devices (user_id, device_id, nickname)
+        SELECT owner_id, id, nickname FROM devices 
+        WHERE owner_id IS NOT NULL
+        ON CONFLICT (user_id, device_id) DO NOTHING;
+        `);
+      console.log("Migrated legacy owners to user_devices.");
+
+      // Cleanup: Remove owner_id ONLY after successful migration
+      await db.query(`ALTER TABLE devices DROP COLUMN IF EXISTS owner_id;`);
+    } catch (e) {
+      // Ignore error if owner_id column doesn't exist anymore
+      console.log("Legacy migration skipped (owner_id missing or already migrated).");
+    }
 
     // Index on readings timestamp for faster graph queries
     await db.query(`CREATE INDEX IF NOT EXISTS idx_readings_device_time ON readings(device_id, created_at DESC);`);

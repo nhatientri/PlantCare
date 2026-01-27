@@ -73,7 +73,7 @@ export default function App() {
   }, [])
 
   const sendCommand = (deviceId, cmd) => {
-    fetch(`${BACKEND_URL}/api/command`, {
+    fetch(`${BACKEND_URL}/api/devices/command`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deviceId, cmd })

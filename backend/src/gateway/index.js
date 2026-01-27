@@ -29,9 +29,24 @@ const getIO = () => {
 };
 
 // Helper to broadcast updates
+// Throttle updates per device to max 1 per second
+const lastBroadcast = {};
+
 const broadcastDeviceUpdate = (deviceId, data) => {
     if (io) {
-        io.emit("device_update", { deviceId, data });
+        const now = Date.now();
+        const last = lastBroadcast[deviceId] || 0;
+
+        // Always pass through if urgency is needed (e.g. online status change), 
+        // but for general status updates, throttle.
+        // Actually, let's throttle everything to 500ms to be safe, 
+        // unless it's a critical state change if we could detect it.
+        // For now, strict 500ms throttle is safer for frontend performance.
+
+        if (now - last > 100) {
+            io.emit("device_update", { deviceId, data });
+            lastBroadcast[deviceId] = now;
+        }
     }
 };
 

@@ -34,6 +34,23 @@ public:
 
     String loadPassword();
     void savePassword(String password);
+
+    // Time Windows
+    int loadMorningStart();
+    void saveMorningStart(int hour);
+    
+    int loadMorningEnd();
+    void saveMorningEnd(int hour);
+    
+    int loadAfternoonStart();
+    void saveAfternoonStart(int hour);
+    
+    int loadAfternoonEnd();
+    void saveAfternoonEnd(int hour);
+
+    // Trigger Mode: 0=AVG, 1=ANY, 2=ALL
+    int loadTriggerMode();
+    void saveTriggerMode(int mode);
 };
 
 #endif

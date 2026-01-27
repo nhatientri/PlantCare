@@ -1,16 +1,84 @@
-# React + Vite
+# PlantCare Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The modern web interface for the PlantCare smart watering system.
 
-Currently, two official plugins are available:
+## 🌿 Overview
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+This frontend application provides a real-time dashboard to monitor and control your PlantCare devices. Built with **React 19** and styled with a fresh "Planty" theme using **Tailwind CSS**, it offers a premium user experience for plant management.
 
-## React Compiler
+## ✨ Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Real-time Dashboard**: Live updates for Soil Moisture, Temperature, Humidity, and Weather Forecast.
+- **Smart Control**: 
+    - **Water Now**: Manual watering with dynamic state feedback (Watering, Soaking, Error).
+    - **Threshold**: Adjustable moisture threshold with auto-save.
+- **Interactive Charts**: 
+    - Historical data visualization (1 Day, 7 Days, 1 Month).
+    - Multi-sensor support with individual color-coded lines.
+    - Reference threshold line.
+- **Device Management**: 
+    - "Plant Details" with sensor calibration (Air/Water values).
+    - Color customization for each plant/sensor.
+    - System Error resolution workflow.
+- **Navigation**: Sidebar navigation for Dashboard, Analytics, Logs, and Settings (placeholder views included).
 
-## Expanding the ESLint configuration
+## 🛠 Tech Stack
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- **Framework**: [React 19](https://react.dev/) + [Vite](https://vitejs.dev/)
+- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/)
+- **Icons**: [Lucide React](https://lucide.dev/)
+- **Charts**: [Recharts](https://recharts.org/)
+- **Communication**: Socket.IO Client (Real-time updates), Fetch API (History)
+
+## 📂 Project Structure
+
+```bash
+src/
+├── components/
+│   ├── common/         # Reusable UI components (Card, Modal, etc.)
+│   ├── dashboard/      # Dashboard-specific components (Chart, Stats, SensorRow)
+│   ├── layout/         # App layout (Sidebar, Header, RightPanel)
+│   └── views/          # Page views (Analytics, Logs, Settings)
+├── constants.js        # Global constants (Colors, API URL)
+├── index.css           # Tailwind & Global Styles
+├── App.jsx             # Main Application Logic
+└── main.jsx            # Entry Point
+```
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js (v18+)
+- Backend server running on `http://localhost:3000`
+
+### Installation
+
+1. Navigate to the frontend directory:
+   ```sh
+   cd frontend
+   ```
+
+2. Install dependencies:
+   ```sh
+   npm install
+   ```
+
+3. Start the development server:
+   ```sh
+   npm run dev
+   ```
+
+4. Open your browser at `http://localhost:5173`
+
+## 🎨 Theme Customization
+
+The theme is defined in `tailwind.config.js` and uses a curated palette:
+- **Background**: Soft Mint (`#eff5f1`)
+- **Cards**: White with soft shadows
+- **Accents**: Deep Green (`#0f3932`) and Terracotta (`#e68e50`)
+
+## 📝 Configuration
+
+- **API URL**: Configured in `src/constants.js` (default: `http://localhost:3000`)
+- **Sensor Colors**: 11 Presets available (`src/constants.js`)

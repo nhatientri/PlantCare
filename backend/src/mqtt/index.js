@@ -21,6 +21,13 @@ const initMqtt = () => {
             const payloadStr = message.toString();
 
             if (type === 'status') {
+                // Global Throttle: Ignore same device status < 2 seconds for DB stability
+                if (!global.lastMsg) global.lastMsg = {};
+                const lastMsgTime = global.lastMsg[deviceId] || 0;
+                const now = Date.now();
+                if (now - lastMsgTime < 200) return;
+                global.lastMsg[deviceId] = now;
+
                 let data;
                 try {
                     data = JSON.parse(payloadStr);
@@ -52,8 +59,22 @@ const initMqtt = () => {
         `, [deviceId, data]);
 
                 // 3. Broadcast to Frontend
-                broadcastDeviceUpdate(deviceId, { ...data, online: true });
-                console.log(`[${deviceId}] Status updated & saved.`);
+                // SANITIZE: Remove sensitive claim data before sending to frontend
+                const cleanData = { ...data, online: true };
+                delete cleanData.claim_pass;
+                delete cleanData.claim_token;
+
+                broadcastDeviceUpdate(deviceId, cleanData);
+                // console.log(`[${deviceId}] Status updated & saved.`);
+
+                // 4. Log Critical Errors automagically
+                const state = parseInt(data.state);
+                if (state === 3 || state === 4) {
+                    await db.query(
+                        "INSERT INTO system_logs (device_id, type, message) VALUES ($1, 'error', $2)",
+                        [deviceId, `Critical Error State: ${state}`]
+                    );
+                }
 
             } else if (type === 'online') {
                 const isOnline = payloadStr.toLowerCase() === 'true';
@@ -66,7 +87,20 @@ const initMqtt = () => {
         `, [deviceId, isOnline]);
 
                 broadcastDeviceUpdate(deviceId, { online: isOnline });
-                console.log(`[${deviceId}] Online: ${isOnline}`);
+                // console.log(`[${deviceId}] Online: ${isOnline}`);
+
+                // Log online/offline events with throttling (Anti-spam)
+                // If the same device logs the same status within 1 minute, skip it.
+                // We rely on memory cache for this check.
+                if (!global.lastLog) global.lastLog = {};
+                const lastLogTime = global.lastLog[deviceId] || 0;
+                if (Date.now() - lastLogTime > 60000) { // 1 minute throttle for connection logs
+                    await db.query(
+                        "INSERT INTO system_logs (device_id, type, message) VALUES ($1, $2, $3)",
+                        [deviceId, isOnline ? 'info' : 'warning', `Device is ${isOnline ? 'Online' : 'Offline'}`]
+                    );
+                    global.lastLog[deviceId] = Date.now();
+                }
             }
         } catch (err) {
             console.error(`Error processing MQTT message on [${topic}]:`, err);
@@ -79,11 +113,21 @@ const initMqtt = () => {
 const sendCommand = (deviceId, cmd) => {
     // Topic: plantcare/DEVICE_ID/cmd
     const client = mqtt.connect(process.env.MQTT_BROKER);
-    // Note: Creating new connection for simplicity, ideally reuse global client.
-    // Let's modify initMqtt to export client.
-    // Actually, let's keep it simple: just connect, publish, end.
+
     client.on('connect', () => {
-        client.publish(`plantcare/${deviceId}/cmd`, cmd, () => {
+        client.publish(`plantcare/${deviceId}/cmd`, cmd, async () => {
+            console.log(`Sent command ${cmd} to ${deviceId}`);
+
+            // Log command
+            try {
+                // We need to import db inside or use the global one if available. 
+                // Since 'db' is required at top, we are good.
+                await db.query(
+                    "INSERT INTO system_logs (device_id, type, message) VALUES ($1, 'info', $2)",
+                    [deviceId, `Command Sent: ${cmd}`]
+                );
+            } catch (e) { console.error("Failed to log command", e); }
+
             client.end();
         });
     });

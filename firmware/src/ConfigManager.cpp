@@ -72,3 +72,47 @@ void ConfigManager::saveWaterValue(int index, int value) {
     String key = "water" + String(index);
     preferences.putInt(key.c_str(), value);
 }
+
+// -- Time Windows --
+
+int ConfigManager::loadMorningStart() {
+    return preferences.getInt("m_start", 6);
+}
+
+void ConfigManager::saveMorningStart(int hour) {
+    preferences.putInt("m_start", hour);
+}
+
+int ConfigManager::loadMorningEnd() {
+    return preferences.getInt("m_end", 10);
+}
+
+void ConfigManager::saveMorningEnd(int hour) {
+    preferences.putInt("m_end", hour);
+}
+
+int ConfigManager::loadAfternoonStart() {
+    return preferences.getInt("a_start", 16);
+}
+
+void ConfigManager::saveAfternoonStart(int hour) {
+    preferences.putInt("a_start", hour);
+}
+
+int ConfigManager::loadAfternoonEnd() {
+    return preferences.getInt("a_end", 19);
+}
+
+void ConfigManager::saveAfternoonEnd(int hour) {
+    preferences.putInt("a_end", hour);
+}
+
+// -- Trigger Mode --
+
+int ConfigManager::loadTriggerMode() {
+    return preferences.getInt("trig_mode", 0); // Default 0 (Average)
+}
+
+void ConfigManager::saveTriggerMode(int mode) {
+    preferences.putInt("trig_mode", mode);
+}

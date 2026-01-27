@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react'
 import { io } from 'socket.io-client'
-import { Sprout } from 'lucide-react'
 import AuthForm from './AuthForm'
 import ClaimDevice from './ClaimDevice'
-import Header from './components/layout/Header'
+import Sidebar from './components/layout/Sidebar'
+import RightPanel from './components/layout/RightPanel'
 import DeviceDashboard from './components/dashboard/DeviceDashboard'
+import AnalyticsView from './components/views/AnalyticsView'
+import LogsView from './components/views/LogsView'
+import SettingsView from './components/views/SettingsView'
 import { BACKEND_URL } from './constants'
+import { Sprout } from 'lucide-react'
 
 export default function App() {
   const [user, setUser] = useState(() => {
@@ -13,7 +17,9 @@ export default function App() {
     return saved ? JSON.parse(saved) : null
   })
 
-  // Persist user on change
+  // View State: 'dashboard', 'analytics', 'logs', 'settings'
+  const [currentView, setCurrentView] = useState('dashboard');
+
   useEffect(() => {
     if (user) {
       localStorage.setItem('plantcare_user', JSON.stringify(user))
@@ -25,8 +31,9 @@ export default function App() {
   const [showClaim, setShowClaim] = useState(false)
   const [status, setStatus] = useState('DISCONNECTED')
   const [devices, setDevices] = useState({})
+  const [selectedDeviceId, setSelectedDeviceId] = useState(null);
 
-  // Load devices when user changes
+  // Load devices
   useEffect(() => {
     if (!user) {
       setDevices({});
@@ -35,7 +42,12 @@ export default function App() {
 
     fetch(`${BACKEND_URL}/api/devices?userId=${user.id}`)
       .then(res => res.json())
-      .then(data => setDevices(data))
+      .then(data => {
+        setDevices(data);
+        if (!selectedDeviceId && Object.keys(data).length > 0) {
+          setSelectedDeviceId(Object.keys(data).sort()[0]);
+        }
+      })
       .catch(err => console.error("API Error", err))
   }, [user])
 
@@ -45,13 +57,10 @@ export default function App() {
     socket.on('disconnect', () => setStatus('DISCONNECTED'))
 
     socket.on('device_update', ({ deviceId, data }) => {
-      // Only update if we already know about this device (it's ours)
       setDevices(prev => {
-        if (!prev[deviceId] && !data.owner_id) {
-          // Note: Ideally backend should only emit to specific user room.
-          // For now, prototype: if it's not in our list, ignore it (unless we refresh)
-          // Actually, realtime updates won't add NEW devices effectively until claim.
-          return prev;
+        if (!prev[deviceId] && !data.owner_id) return prev;
+        if (Object.keys(prev).length === 0 && !selectedDeviceId) {
+          setSelectedDeviceId(deviceId);
         }
         if (prev[deviceId]) {
           return { ...prev, [deviceId]: { ...prev[deviceId], ...data } }
@@ -74,59 +83,106 @@ export default function App() {
   const handleLogout = () => {
     setUser(null);
     setDevices({});
+    setSelectedDeviceId(null);
   }
 
   if (!user) {
     return <AuthForm onLogin={setUser} />
   }
 
+  const selectedDevice = devices[selectedDeviceId];
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  // Render content based on current view
+  const renderContent = () => {
+    switch (currentView) {
+      case 'analytics': return <AnalyticsView />;
+      case 'logs': return <LogsView />;
+      case 'settings': return <SettingsView user={user} />;
+      case 'dashboard':
+      default:
+        return selectedDevice ? (
+          <DeviceDashboard
+            deviceId={selectedDeviceId}
+            data={selectedDevice}
+            nickname={selectedDevice.nickname}
+            sendCommand={sendCommand}
+            onRename={(id, newName) => {
+              fetch(`${BACKEND_URL}/api/devices/${id}/nickname`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.id, nickname: newName })
+              }).then(res => {
+                if (res.ok) {
+                  setDevices(prev => ({
+                    ...prev,
+                    [id]: { ...prev[id], nickname: newName }
+                  }));
+                }
+              });
+            }}
+            onRemove={(id) => {
+              // ... remove logic
+              fetch(`${BACKEND_URL}/api/devices/${id}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.id })
+              }).then(() => {
+                const newDevices = { ...devices };
+                delete newDevices[id];
+                setDevices(newDevices);
+                const keys = Object.keys(newDevices).sort();
+                setSelectedDeviceId(keys.length > 0 ? keys[0] : null);
+              });
+            }}
+          />
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-plant-text-secondary p-12 bg-white/50 rounded-[32px] border border-dashed border-slate-200">
+            <div className="w-20 h-20 bg-plant-green/10 rounded-full flex items-center justify-center mb-6">
+              <Sprout size={40} className="text-plant-green" />
+            </div>
+            <h2 className="text-xl font-bold text-plant-dark mb-2">No Plant Selected</h2>
+            <p className="max-w-md text-center">Select a plant from the right sidebar or add a new device to get started monitoring your garden.</p>
+          </div>
+        );
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-slate-950 p-4 md:p-8 font-sans">
-      <Header
+    <div className="flex min-h-screen bg-plant-bg font-sans text-plant-dark">
+      {/* 1. Sidebar */}
+      <Sidebar
+        activeView={currentView}
+        onViewChange={setCurrentView}
         user={user}
-        status={status}
         onLogout={handleLogout}
-        onAddDevice={() => setShowClaim(true)}
       />
 
-      <main className="max-w-6xl mx-auto space-y-6">
-        {Object.keys(devices).length === 0 ? (
-          <div className="text-center py-20 text-slate-500 bg-slate-900/50 rounded-2xl border border-slate-800 border-dashed">
-            <Sprout className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-slate-300">No Plants Yet</h3>
-            <p className="mb-6">Add your first PlantCare device to get started.</p>
-            <button
-              onClick={() => setShowClaim(true)}
-              className="text-emerald-500 hover:text-emerald-400 font-bold"
-            >
-              Claim a Device →
-            </button>
+      {/* 2. Main Content */}
+      <div className="flex-1 flex flex-col p-8 pl-0 overflow-y-auto h-screen">
+        <header className="mb-8 flex items-end justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Welcome Back, {user.username}!</h1>
+            <p className="text-plant-text-secondary mt-1 ml-1 flex items-center gap-2">
+              <span className="opacity-60">📅</span> {today}
+            </p>
           </div>
-        ) : (
-          Object.keys(devices).sort().map(deviceId => (
-            <DeviceDashboard
-              key={deviceId}
-              deviceId={deviceId}
-              nickname={devices[deviceId].nickname}
-              data={devices[deviceId]}
-              sendCommand={sendCommand}
-              onRemove={(id) => {
-                fetch(`${BACKEND_URL}/api/devices/${id}`, {
-                  method: 'DELETE',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ userId: user.id })
-                })
-                  .then(() => {
-                    // Refresh list locally or re-fetch
-                    const newDevices = { ...devices };
-                    delete newDevices[id];
-                    setDevices(newDevices);
-                  });
-              }}
-            />
-          ))
-        )}
-      </main>
+          {/* Context Actions could go here */}
+        </header>
+
+        {renderContent()}
+      </div>
+
+      {/* 3. Right Panel (Only show on Dashboard view, or always? Usually dashboard only or context aware) */}
+      <RightPanel
+        devices={devices}
+        selectedId={selectedDeviceId}
+        onSelect={(id) => {
+          setSelectedDeviceId(id);
+          setCurrentView('dashboard'); // Switch back to dashboard when selecting a plant
+        }}
+        onAdd={() => setShowClaim(true)}
+      />
 
       {showClaim && (
         <ClaimDevice
@@ -134,7 +190,6 @@ export default function App() {
           onClose={() => setShowClaim(false)}
           onClaimed={() => {
             setShowClaim(false);
-            // Refresh list
             fetch(`${BACKEND_URL}/api/devices?userId=${user.id}`)
               .then(res => res.json())
               .then(data => setDevices(data));

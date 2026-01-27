@@ -24,9 +24,9 @@ private:
     ConfigManager* config;
 
     unsigned long stateStartTime;
-    const unsigned long WATERING_DURATION = 2000; // 2 seconds
-    const unsigned long SOAK_DURATION = 30000;    // 30 seconds
-    const unsigned long CHECK_INTERVAL = 1000 * 30; // 30 mins
+    const unsigned long WATERING_DURATION = 5000; // 5 seconds
+    const unsigned long SOAK_DURATION = 1000 * 60 * 10;    // 10 minutes
+    const unsigned long CHECK_INTERVAL = 1000 * 60 * 20; // 20 minutes
     const int RISE_THRESHOLD = 2; // 2% rise expected
 
     char failMessage[100];

@@ -1,22 +1,15 @@
 export const PRESET_COLORS = [
-    '#ef4444', // Red 500
-    '#f97316', // Orange 500
-    '#f59e0b', // Amber 500
-    '#eab308', // Yellow 500
-    '#84cc16', // Lime 500
-    '#22c55e', // Green 500
-    '#10b981', // Emerald 500
-    '#14b8a6', // Teal 500
-    '#06b6d4', // Cyan 500
-    '#0ea5e9', // Sky 500
-    '#3b82f6', // Blue 500
-    '#6366f1', // Indigo 500
-    '#8b5cf6', // Violet 500
-    '#a855f7', // Purple 500
-    '#d946ef', // Fuchsia 500
-    '#ec4899', // Pink 500
-    '#f43f5e', // Rose 500
-    '#6b7280', // Gray 500
+    '#ef4444', // Red
+    '#f97316', // Orange
+    '#f59e0b', // Amber
+    '#84cc16', // Lime
+    '#22c55e', // Green
+    '#14b8a6', // Teal
+    '#0ea5e9', // Sky
+    '#3b82f6', // Blue
+    '#8b5cf6', // Violet
+    '#ec4899', // Pink
+    '#6b7280', // Gray
 ]
 
 export const BACKEND_URL = 'http://localhost:3000'

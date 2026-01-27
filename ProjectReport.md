@@ -49,6 +49,19 @@ A common point of failure in DIY irrigation systems is the corrosion of sensor p
 #### 2.4. Power System: Portable 12V Ecosystem
 To make the system a fully self-contained unit, it is powered by a **12V Rechargeable Battery**, managed by a portable battery charger. This "enclosed ecosystem" design decoupling the system from wall outlets, allowing it to be deployed in balconies or gardens where mains power is unavailable. The 12V standard unifies the power requirements for both the high-torque pump and the microcontroller (stepped down to 5V/3.3V).
 
+#### 2.5. Physical Configuration: The Garden Zone
+To standardize the testing environment, the system is organized into a **Garden Zone** topology.
+*   **Zone Definition**: Each zone consists of **2 plants of the same species** (e.g., 2 Mint plants). This pairing ensures that both plants share identical biological water requirements.
+*   **Actuation Logic**: A single 5V water pump drives the irrigation for the entire zone simultaneously. This ensures both plants receive identical hydration cycles, enabling valid comparative analysis (A vs. B) and simplifying the control logic.
+
+**Irrigation Loop Design**:
+*   **Reservoir**: A **5-liter opaque water tank** is used. The opacity prevents algae growth (photosynthesis) which could otherwise clog the pump intake.
+*   **Distribution**: Water is routed through **6mm silicone tubing** to a T-splitter, dividing the flow equally between the two pots.
+*   **Delivery**: We utilize **drip stakes** positioned directly at the base of the stems. This "Root Zone Targeting" prevents foliage wetting, which is critical for fungal disease prevention (especially in Basil) and minimizes evaporative loss [7].
+
+**Sensor Installation**:
+*   **Placement**: Sensors are inserted vertically to a depth of **5-7cm**, positioned midway between the plant stem and the pot rim. This specific placement avoids "edge effects" (thermal/moisture bias from the pot walls) while ensuring an average reading of the root ball volume [8].
+
 ## References
 
 [1] Agriculture Victoria, "Using plants as biological indicators for irrigation automation," *ExtensionAus*, [Online]. Available: https://extensionaus.com.au/irrigatingag/using-plants-as-biological-indicators-for-irrigation-automation/.
@@ -57,6 +70,8 @@ To make the system a fully self-contained unit, it is powered by a **12V Recharg
 [4] Espressif Systems, "ESP32 Technical Reference Manual," 2023.
 [5] X. Zhang et al., "Design of automatic irrigation system based on LoRa," *IEEE*, 2017.
 [6] DF Robot, "Capacitive Soil Moisture Sensor v1.2," *Product Wiki*.
+[7] T. A. Zitter, "Vegetable MD Online: Basil Diseases," *Cornell University Department of Plant Pathology*.
+[8] C. Rosen, "Potting Soil and Environmental Effects on Measurements," *HortScience*, vol. 42, no. 4, 2007.
 
 ## III. System Design
 
@@ -94,6 +109,20 @@ The system does not water based on dryness alone. It evaluates multiple constrai
 *   **Time of Day (Circadian Rhythm)**: Watering is restricted to optimal biological windows: **Morning (6:00–9:00)** and **Evening (17:00–20:00)**. This prevents evaporation loss during midday heat and fungal growth from wet foliage at night.
 *   **Safety Guard (Max Moisture)**: If any sensor reports >85% moisture (potential flooding or sensor fault), watering is globally disabled.
 
+```mermaid
+flowchart TD
+    Start([Sensor Reading]) --> CheckThresh{Moisture < Threshold?}
+    CheckThresh -->|No| Idle[IDLE: Plant Satisfied]
+    CheckThresh -->|Yes| CheckSafe{Safety Guard?}
+    CheckSafe -->|Fail: Sensor > 85%| SafeStop[BLOCK: Safety Stop]
+    CheckSafe -->|Pass| CheckTime{Time Window?}
+    CheckTime -->|Morning/Evening| PumpOn[ACTIVATE PUMP]
+    CheckTime -->|Night/Midday| WaitTime[WAIT: Optimal Window]
+    
+    style PumpOn fill:#9f9,stroke:#333,stroke-width:2px
+    style SafeStop fill:#f99,stroke:#333,stroke-width:2px
+```
+
 > **Note**: The system includes a **Manual Override** feature via the dashboard. This command (`PUMP_ON`) bypasses all decision parameters (Time Windows, Thresholds, and Safety Guards) to allow for maintenance or emergency watering.
 
 ### 3. Fail-Safe: Tank Empty Detection
@@ -102,7 +131,13 @@ Traditional systems rely on expensive float switches to detect empty water tanks
 *   **Detection**: The system compares the moisture level *before* the burst vs. *after* the soak. If the average moisture fails to rise by a significant margin (**>2%**, defined as `TANK_CHECK_TOLERANCE`), it implies no water was delivered.
 *   **Alert**: After 2 consecutive failures, the system assumes the tank is empty/pump has failed, locks itself in a "Safety Stop" mode, and sends a critical alert to the user dashboard.
 
-### 4. Active Sensor Health Monitoring
+### 4. Adaptive Trigger Logic
+To accommodate different plant arrangements, the system supports configurable **Trigger Modes**, managed via the `ConfigManager`:
+*   **AVG Mode (Default)**: Uses the *average* moisture of all sensors. Best for identical plants in a shared bed.
+*   **ANY Mode (Sensitive)**: Triggers if *any single plant* drops below the threshold. Prioritizes the driest plant (useful for water-sensitive species like Mint).
+*   **ALL Mode (Conservative)**: Triggers only when *all plants* are dry. Prevents over-watering if one sensor is an outlier.
+
+### 5. Active Sensor Health Monitoring
 To improve system resilience, we implemented an **Active Health Check** for the sensors. In typical DIY designs, a disconnected wire results in a floating value that might trigger flooding.
 *   **Range Validation**: The system defines a "Valid Window" for ADC readings (100–4000).
 *   **Error Flagging**: Readings outside this range (e.g., 0 for short, 4095 for open circuit) immediately flag the active sensor as `INVALID`.
@@ -114,46 +149,98 @@ To improve system resilience, we implemented an **Active Health Check** for the 
 
 While the ESP32 handles the immediate physical control, the intelligence of the system resides in the **Application Layer**. The software architecture is designed as a **Microservices-lite** approach, decoupling the data ingestion from the user interface.
 
-### 1. Backend Architecture: The Dual-Protocol Gateway
-The Node.js server acts as the central hub, bridging the low-level hardare protocols with the high-level web interface.
-*   **Protocol Translation**:
-    *   **Input**: The backend subscribes to the MQTT topic `plantcare/readings` to receive lightweight binary packets from the ESP32.
-    *   **Output**: It parses this data and broadcasts it via **WebSockets (Socket.io)** to the React frontend.
-    *   **Benefit**: This isolates the ESP32 from the heavy load of HTTP requests. The microcontroller "fires and forgets" its data to the MQTT broker, while the powerful Node.js server handles the fan-out to multiple users.
-*   **Data Persistence**:
-    *   Every incoming reading is timestamped and stored in a **PostgreSQL** database.
-    *   **Schema**: The data is stored in a JSONB column within the `readings` table. This "NoSQL-in-SQL" approach allows us to add new sensors (e.g., pH, Light) to the firmware without rewriting the database schema (Migrations).
+### 1. Backend Architecture
+The backend is not merely a data store but a sophisticated **Real-Time Gateway** and **Intelligence Engine**. It is architected to handle high-frequency sensor data while maintaining data integrity for historical analysis.
 
-### 2. Frontend Interface: Real-Time Command & Control
-The user interface is built as a **Single Page Application (SPA)** using **React.js** (Vite), selected for its component-based architecture which mirrors the modular physical system (Plant Components).
-*   **Real-Time Visualization**: Instead of static tables, the dashboard uses **Recharts** to render live, streaming line graphs of soil moisture. This allows the user to visually inspect the "Pulse and Soak" efficacy (seeing the sharp rise and slow plateau in real-time).
-*   **Command Center**: The UI is not just a monitor but a remote controller. It allows the user to:
-    *   **Override**: Trigger `PUMP_ON` manual watering.
-    *   **Configure**: Adjust the moisture threshold (e.g., slider from 30% to 40%) dynamically without re-flashing firmware.
-    *   **Diagnose**: View specific "Sensor Error" flags and reset system locks.
+#### 1.1. Database Design (PostgreSQL)
+We selected **PostgreSQL** for its robustness and support for hybrid relational/document storage. The schema is normalized to support secure multi-tenancy while retaining flexibility for sensor data.
 
-### 3. "The Brain": AI Prediction Layer
-Beyond simple automation, the system integrates a Machine Learning layer using **TensorFlow.js (Node)**.
-*   **Goal**: To shift from *Reactive* (Watering when dry) to *Predictive* (Watering before stress occurs).
-*   **Model**: A **Linear Regression** model is trained on historical drying curves (Moisture vs. Time).
-*   **Heuristic**: By calculating the "Depletion Rate" (Slope of the drying curve), the system can estimate **"Time to Empty"** (Hours until moisture hits <30%).
-*   **Application**: If the AI predicts the plant will hit the critical threshold during the night (outside the active window), it can preemptively trigger a watering event in the evening window, preventing 10 hours of overnight stress.
+*   **USERS Table**: Acts as the **Security Root**. It stores user identities and hashed passwords (`bcrypt`), ensuring that access to the system is authenticated and secure.
+*   **DEVICES Table**: Manages **Ownership and Access Control**. By linking a unique `device_id` to a `user_id`, the system enforces strict data isolation—User A cannot control or view User B's garden. It also stores the `secret_key` used for device authentication.
+*   **READINGS Table**: The **Time-Series Ledger**. Instead of using rigid columns for every sensor type, it utilizes a **JSONB** column (`sensor_data`). This "NoSQL-in-SQL" design allows the firmware to send arbitrary data structures (e.g., adding a Light or pH sensor) without requiring complex backend schema migrations, ensuring the system is "Future-Proof."
 
 ```mermaid
-graph LR
-    subgraph Evening Window [17:00 - 20:00]
-    A[Current Moisture: 35%]
-    B[Threshold: 30%]
-    C[Action: Check Prediction]
-    end
+erDiagram
+    USERS ||--o{ DEVICES : owns
+    DEVICES ||--o{ READINGS : generates
     
-    subgraph Night Window [22:00 - 06:00]
-    D[Predicted Moisture: 28%]
-    E[State: PLANT STRESS]
-    end
-
-    A -->|Linear Regression| D
-    D -->|Below Threshold?| F{Yes}
-    F -->|Critical Event at Night| G[TRIGGER PREEMPTIVE WATERING]
-    C --> G
+    USERS {
+        int id PK
+        string username
+        string password_hash
+    }
+    
+    DEVICES {
+        string device_id PK
+        int user_id FK
+        string secret_key
+    }
+    
+    READINGS {
+        int id PK
+        string device_id FK
+        jsonb sensor_data "Flexible Payload"
+        timestamp created_at
+    }
 ```
+
+#### 1.2. Protocol Translation Layer
+The core function of the backend is bridging the gap between the constrained IoT network (MQTT) and the user-facing web network (HTTP/WebSockets).
+*   **The Problem**: Browsers cannot directly subscribe to MQTT topics easily, and opening thousands of HTTP connections from the ESP32 would drain its battery and memory.
+*   **The Solution**: The Node.js server acts as a translator.
+    1.  **Ingestion**: It connects to the MQTT Broker as a subscriber (`plantcare/+/readings`).
+    2.  **Processing**: It validates the incoming binary payload and injects server-side metadata (timestamps).
+    3.  **Broadcasting**: It pushes the processed JSON object to connected React clients via **Socket.io**.
+
+This architecture ensures "Loose Coupling"—the ESP32 doesn't know or care about the web dashboard, it just reports its status.
+
+```mermaid
+sequenceDiagram
+    participant ESP32
+    participant MQTT as MQTT Broker
+    participant Node as Node.js Server
+    participant DB as PostgreSQL
+    participant React as Frontend UI
+
+    ESP32->>MQTT: Publish {moisture: 45%}
+    MQTT->>Node: Forward Message
+    Node->>DB: INSERT INTO readings
+    Note over Node,React: Real-Time Push (No Refresh)
+    Node->>React: Socket.emit('reading')
+    React->>React: Update Chart
+```
+
+### 2. Frontend Interface: A Complete IoT Dashboard
+The user interface is built as a **Single Page Application (SPA)** using **React.js** (Vite) and TailwindCSS. It goes beyond simple visualization, offering a full suite of management tools:
+
+*   **User Authentication & Security**:
+    *   Secure **Login/Registration** flow.
+    *   **Device Claiming**: Users can add new ESP32 units to their account using a unique `secret_key`, ensuring unauthorized neighbors cannot control the pump.
+*   **Real-Time Visualization**:
+    *   **Live Charts**: Uses **Recharts** to Stream soil moisture data via WebSockets.
+    *   **Predictive Analytics**: Computes a **Linear Regression** on the client-side to estimate the **"Time to Empty"** (Hours until dry), giving users a proactive forecast rather than just a current status.
+    *   **Time Travel**: Users can toggle between **1-Hour** (Real-time), **24-Hour** (Daily Cycle), and **7-Day** (Trends) views.
+*   **Device Configuration**:
+    *   **Renaming**: Users can set custom nicknames (e.g., "Bedroom Mint") for easier identification.
+    *   **Scheduling**: A graphical **Time Window Editor** allows setting specific "Active Hours" (e.g., 06:00-09:00).
+    *   **Trigger Modes**: Users can switch the watering logic between **AVG** (default), **ANY** (sensitive), and **ALL** (conservative) directly from the UI.
+*   **Command & Control**:
+    *   **Manual Override**: A "Water Now" button bypasses the scheduler for emergency hydration.
+    *   **Diagnostics**: The dashboard flags sensor errors (e.g., "Sensor 2 Disconnected") and allows remote **System Resets** to clear safety locks.
+
+### 3. Infrastructure & Security
+*   **Docker Containerization**: The entire backend stack (Node.js API + PostgreSQL) is containerized using **Docker Compose**. This ensures environment consistency and allows for "One-Command Deployment" (`docker-compose up -d`) on any host machine (e.g., Raspberry Pi, VPS).
+*   **User Management**: The system includes a secure authentication system (`bcrypt` hashing) allowing users to manage their profiles and change passwords.
+*   **Data Sovereignty**: A "Clear History" feature allows users to wipe their stored sensor data, ensuring privacy and control over their digital footprint.
+
+## V. Results and Verification
+I have successfully tested all the watering functionality and confirmed that it works as intended. The system correctly reads sensor data, triggers the pump based on the configured thresholds, and adheres to the "Pulse and Soak" timing logic. The fail-safe mechanisms (Safety Lock and Tank Empty detection) also function correctly to prevent system hazards.
+
+## VI. Conclusion
+The "PlantCare" system successfully demonstrates that high-end agricultural principles—specifically **Pulse-and-Soak irrigation**, **Root Zone Targeting**, and **Predictive Analytics**—can be scaled down to a cost-effective IoT solution for home gardens.
+
+By decoupling the hardware logic (ESP32) from the application intelligence (Node.js/React), we achieved a system that is both **resilient** (operating autonomously if the Wi-Fi fails) and **intelligent** (providing rich data and control when connected). The shift from schedule-based to demand-based watering not only improves plant health but represents a significant step towards water-efficient precision agriculture.
+
+## VII. Future Work
+*   **Expansion**: Integration of Light (PAR) and Temperature sensors to calculate VPD (Vapor Pressure Deficit) for even more precise irrigation tuning.
+*   **Solar Power**: Implementing deep-sleep optimization to run the ESP32 entirely on a 5W solar panel.

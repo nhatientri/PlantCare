@@ -4,6 +4,7 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN npm install
+USER node
 
 # Install nodemon globally for dev
 RUN npm install -g nodemon

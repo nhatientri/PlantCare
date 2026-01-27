@@ -34,9 +34,14 @@ export function linearRegression(yValues) {
  * Returns hours until moisture hits limit. Returns -1 if slope is positive (wetting).
  */
 export function calculateTimeToEmpty(historyValues, current, threshold, intervalMinutes = 5) {
-    if (historyValues.length < 5) return null; // Need data
+    // 1. Filter Erroneous Values (ADC/Percentage outside 0-100 zone)
+    // We assume historyValues are percentages. 
+    // Ignore exactly 0 (often disconnected) or > 100 or < 0
+    const validValues = historyValues.filter(v => v > 0 && v <= 100);
 
-    const { slope, intercept } = linearRegression(historyValues);
+    if (validValues.length < 5) return null; // Need sufficient valid data
+
+    const { slope, intercept } = linearRegression(validValues);
 
     // slope is "moisture change per index". index = interval.
     // If slope > 0, it's getting wetter (or sensor noise)

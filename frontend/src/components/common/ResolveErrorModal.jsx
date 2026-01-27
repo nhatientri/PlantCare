@@ -5,41 +5,41 @@ export default function ResolveErrorModal({ isOpen, onClose, onConfirm, isSendin
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 relative shadow-2xl shadow-red-900/20">
-                <div className="flex flex-col items-center text-center mb-6">
-                    <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mb-4">
-                        <AlertTriangle className="w-8 h-8" />
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl w-full max-w-md p-8 relative shadow-2xl shadow-slate-200 animate-in zoom-in-95 duration-200">
+                <div className="flex flex-col items-center text-center mb-8">
+                    <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-6 shadow-sm">
+                        <AlertTriangle className="w-10 h-10" />
                     </div>
-                    <h2 className="text-xl font-bold text-white mb-2">System Locked</h2>
-                    <p className="text-slate-400 text-sm">
-                        Automatic watering has been halted to protect the pump because no moisture rise was detected after watering.
+                    <h2 className="text-2xl font-bold text-plant-dark mb-3">System Paused</h2>
+                    <p className="text-plant-text-secondary leading-relaxed">
+                        Automatic watering has been halted to protect the pump. No moisture rise was detected after the last cycle.
                     </p>
                 </div>
 
-                <div className="bg-slate-950 rounded-xl p-4 mb-6 border border-slate-800">
-                    <h3 className="text-sm font-bold text-slate-300 mb-3 uppercase tracking-wider">Please Verify:</h3>
-                    <ul className="space-y-3 text-sm text-slate-400 text-left">
-                        <li className="flex items-start gap-2">
-                            <div className="mt-0.5 w-4 h-4 rounded border border-slate-600 flex-shrink-0" />
-                            <span>Water tank is filled and pump is submerged.</span>
+                <div className="bg-plant-bg rounded-2xl p-6 mb-8 border border-slate-100">
+                    <h3 className="text-xs font-bold text-plant-dark mb-4 uppercase tracking-widest">Inspection Checklist</h3>
+                    <ul className="space-y-4 text-sm text-plant-text-secondary text-left">
+                        <li className="flex items-start gap-3">
+                            <div className="mt-1 w-4 h-4 rounded-full border-2 border-plant-accent/50 flex-shrink-0" />
+                            <span>Is the water tank filled and pump submerged?</span>
                         </li>
-                        <li className="flex items-start gap-2">
-                            <div className="mt-0.5 w-4 h-4 rounded border border-slate-600 flex-shrink-0" />
-                            <span>Sensors are properly inserted in soil.</span>
+                        <li className="flex items-start gap-3">
+                            <div className="mt-1 w-4 h-4 rounded-full border-2 border-plant-accent/50 flex-shrink-0" />
+                            <span>Are sensors properly inserted into the soil?</span>
                         </li>
-                        <li className="flex items-start gap-2">
-                            <div className="mt-0.5 w-4 h-4 rounded border border-slate-600 flex-shrink-0" />
-                            <span>Pump tubing is not kinked or blocked.</span>
+                        <li className="flex items-start gap-3">
+                            <div className="mt-1 w-4 h-4 rounded-full border-2 border-plant-accent/50 flex-shrink-0" />
+                            <span>Is the pump tubing free of kinks or blockages?</span>
                         </li>
                     </ul>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-4">
                     <button
                         onClick={onClose}
                         disabled={isSending}
-                        className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-medium transition-colors"
+                        className="px-6 py-4 bg-white border-2 border-slate-100 hover:border-slate-200 text-plant-text-secondary rounded-2xl font-bold transition-colors"
                     >
                         Cancel
                     </button>
@@ -47,11 +47,11 @@ export default function ResolveErrorModal({ isOpen, onClose, onConfirm, isSendin
                         onClick={onConfirm}
                         disabled={isSending}
                         className={clsx(
-                            "px-4 py-3 rounded-xl font-bold text-white transition-all flex items-center justify-center gap-2",
-                            isSending ? "bg-red-600/50 cursor-wait" : "bg-red-600 hover:bg-red-500 shadow-lg shadow-red-900/30"
+                            "px-6 py-4 rounded-2xl font-bold text-white transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-500/20",
+                            isSending ? "bg-red-400 cursor-wait" : "bg-red-500 hover:bg-red-600 hover:scale-[1.02] active:scale-[0.98]"
                         )}
                     >
-                        {isSending ? "Resetting..." : "I Fixed It, Reset System"}
+                        {isSending ? "Resetting..." : "Resolve Issue"}
                     </button>
                 </div>
             </div>

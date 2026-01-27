@@ -1,10 +1,21 @@
 @import "tailwindcss";
 
 @theme {
-  --color-slate-950: #020617;
-  --color-slate-50: #f8fafc;
+  --color-plant-bg: #F7FBF9;
+  /* Brighter, almost white mint */
+  --color-plant-card: #FFFFFF;
+  --color-plant-dark: #022C22;
+  /* Very dark green (High contrast) */
+  --color-plant-accent: #F97316;
+  /* Bright Orange */
+  --color-plant-highlight: #ECFDF5;
+  /* Bright Mint highlight */
+  --color-plant-green: #10B981;
+  /* Vibrant Emerald */
+  --color-plant-text-secondary: #4B5563;
+  /* Darker grey for better readability */
 }
 
 body {
-  @apply bg-slate-950 text-slate-50;
+  @apply bg-plant-bg text-plant-dark;
 }

@@ -50,13 +50,40 @@ void PlantControl::update() {
                     if (avg < threshold) {
                          // Check Time: Morning (6-10) OR Afternoon (16-19)
                          int h = network->getHour();
-                         bool isMorning = (h >= 6 && h < 10);
-                         bool isAfternoon = (h >= 16 && h < 19);
+                         int mStart = config->loadMorningStart();
+                         int mEnd = config->loadMorningEnd();
+                         int aStart = config->loadAfternoonStart();
+                         int aEnd = config->loadAfternoonEnd();
+
+                         bool isMorning = (h >= mStart && h < mEnd);
+                         bool isAfternoon = (h >= aStart && h < aEnd);
                          
                          if (isMorning || isAfternoon) {
-                             // Snapshot usage for validation logic later
-                             sensors->snapshotMoisture();
-                             setState(WATERING);
+                             // Check Moisture based on Mode
+                             int mode = config->loadTriggerMode();
+                             bool thirsty = false;
+                             
+                             std::vector<SensorDetail> readings = sensors->getReadings();
+                             int threshold = config->loadThreshold();
+
+                             if (mode == 1) { // ANY
+                                 for(auto& r : readings) {
+                                     if(r.percent < threshold) { thirsty = true; break; }
+                                 }
+                             } else if (mode == 2) { // ALL
+                                 thirsty = true;
+                                 for(auto& r : readings) {
+                                     if(r.percent >= threshold) { thirsty = false; break; }
+                                 }
+                             } else { // AVG (Default)
+                                 if (avg < threshold) thirsty = true;
+                             }
+
+                             if (thirsty) {
+                                 // Snapshot usage for validation logic later
+                                 sensors->snapshotMoisture();
+                                 setState(WATERING);
+                             }
                          } else {
                              // Restricted time
                              if (elapsed > 3600000) { // Log once an hour
@@ -168,8 +195,17 @@ void PlantControl::broadcastStatus() {
     DHTReading dht = sensors->getDHT();
     doc["temp"] = dht.temperature;
     doc["humidity"] = dht.humidity;
-    doc["claim_pass"] = config->loadPassword(); // For claiming
+    // doc["claim_pass"] // REMOVED FOR SECURITY
     doc["threshold"] = config->loadThreshold();
+    
+    JsonObject windows = doc["windows"].to<JsonObject>();
+    windows["m_start"] = config->loadMorningStart();
+    windows["m_end"] = config->loadMorningEnd();
+    windows["a_start"] = config->loadAfternoonStart();
+    windows["a_end"] = config->loadAfternoonEnd();
+    
+    doc["mode"] = config->loadTriggerMode(); // 0=AVG, 1=ANY, 2=ALL
+
     doc["rssi"] = WiFi.RSSI();
 
     char buffer[512];
@@ -202,6 +238,24 @@ void PlantControl::processCommand(const char* topic, const char* payload) {
                  network->publish("plantcare/log", "Calibration updated");
                  broadcastStatus();
              }
+        } else if (strncmp(payload, "SET_TIME_WINDOW:", 16) == 0) {
+             // Format: SET_TIME_WINDOW:mStart:mEnd:aStart:aEnd
+             int mStart, mEnd, aStart, aEnd;
+             if (sscanf(payload, "SET_TIME_WINDOW:%d:%d:%d:%d", &mStart, &mEnd, &aStart, &aEnd) == 4) {
+                 config->saveMorningStart(mStart);
+                 config->saveMorningEnd(mEnd);
+                 config->saveAfternoonStart(aStart);
+                 config->saveAfternoonEnd(aEnd);
+                 
+                 broadcastStatus();
+             }
+        } else if (strncmp(payload, "SET_TRIGGER_MODE:", 17) == 0) {
+            int mode = atoi(payload + 17);
+            if (mode >= 0 && mode <= 2) {
+                config->saveTriggerMode(mode);
+                network->publish("plantcare/log", "Trigger mode updated");
+                broadcastStatus();
+            }
         }
     }
 }

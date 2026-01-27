@@ -4,6 +4,7 @@
     "description": "Dual-Protocol Gateway for PlantCare System",
     "main": "server.js",
     "scripts": {
+        "prestart": "node src/db/init.js",
         "start": "node server.js",
         "dev": "nodemon server.js"
     },

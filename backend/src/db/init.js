@@ -114,7 +114,12 @@ const initDb = async () => {
     console.log("Created 'system_logs' table.");
 
     // Index on logs timestamp for faster queries
-    await db.query(`CREATE INDEX IF NOT EXISTS idx_logs_time ON system_logs(created_at DESC);`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_logs_created_at ON system_logs(created_at DESC);`);
+    // Index on logs by device and time (fast lookup for specific device logs)
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_logs_device_time ON system_logs(device_id, created_at DESC);`);
+
+    // Index on user_devices for fast user lookup
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_user_devices_user ON user_devices(user_id);`);
 
     console.log("Database initialized successfully.");
   } catch (err) {

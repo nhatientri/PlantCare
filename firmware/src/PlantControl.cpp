@@ -28,6 +28,37 @@ void PlantControl::setState(State newState) {
     broadcastStatus();
 }
 
+bool PlantControl::needsWater() {
+    float avg = sensors->getAverageMoisture();
+    int threshold = config->loadThreshold();
+    int mode = config->loadTriggerMode();
+    
+    // Mode 0: AVG (Default)
+    if (mode == 0) { 
+        return avg < threshold;
+    }
+    
+    std::vector<SensorDetail> readings = sensors->getReadings();
+    
+    // Mode 1: ANY (Water if ANY sensor is below threshold)
+    if (mode == 1) { 
+        for(auto& r : readings) {
+            if(r.percent < threshold) return true;
+        }
+        return false;
+    }
+    
+    // Mode 2: ALL (Water only if ALL sensors are below threshold)
+    if (mode == 2) { 
+        for(auto& r : readings) {
+            if(r.percent >= threshold) return false;
+        }
+        return true;
+    }
+    
+    return false; // Fallback
+}
+
 void PlantControl::turnPump(bool on) {
     digitalWrite(PUMP_PIN, on ? HIGH : LOW);
     // If relay is active low, invert this. Assuming Active High for now.
@@ -59,27 +90,7 @@ void PlantControl::update() {
                          bool isAfternoon = (h >= aStart && h < aEnd);
                          
                          if (isMorning || isAfternoon) {
-                             // Check Moisture based on Mode
-                             int mode = config->loadTriggerMode();
-                             bool thirsty = false;
-                             
-                             std::vector<SensorDetail> readings = sensors->getReadings();
-                             int threshold = config->loadThreshold();
-
-                             if (mode == 1) { // ANY
-                                 for(auto& r : readings) {
-                                     if(r.percent < threshold) { thirsty = true; break; }
-                                 }
-                             } else if (mode == 2) { // ALL
-                                 thirsty = true;
-                                 for(auto& r : readings) {
-                                     if(r.percent >= threshold) { thirsty = false; break; }
-                                 }
-                             } else { // AVG (Default)
-                                 if (avg < threshold) thirsty = true;
-                             }
-
-                             if (thirsty) {
+                             if (needsWater()) {
                                  // Snapshot usage for validation logic later
                                  sensors->snapshotMoisture();
                                  setState(WATERING);
@@ -134,8 +145,7 @@ void PlantControl::update() {
                     }
 
                     // Decide if we need more water or back to IDLE
-                    float avg = sensors->getAverageMoisture();
-                    if (avg < config->loadThreshold()) {
+                    if (needsWater()) {
                          // Need more water, but ensure we don't loop forever if tank is empty behavior matches but sensors are just weird.
                          // For now, loop back to WATERING
                          sensors->snapshotMoisture(); // New snapshot
@@ -195,7 +205,6 @@ void PlantControl::broadcastStatus() {
     DHTReading dht = sensors->getDHT();
     doc["temp"] = dht.temperature;
     doc["humidity"] = dht.humidity;
-    // doc["claim_pass"] // REMOVED FOR SECURITY
     doc["threshold"] = config->loadThreshold();
     
     JsonObject windows = doc["windows"].to<JsonObject>();

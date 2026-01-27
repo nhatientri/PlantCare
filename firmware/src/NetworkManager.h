@@ -7,7 +7,7 @@
 #include <WiFiUdp.h>
 #include <NTPClient.h>
 #include "ConfigManager.h"
-#include <ArduinoOTA.h>
+
 
 class NetworkManager {
 private:
@@ -26,7 +26,7 @@ private:
 
     void reconnect();
     static void saveConfigCallback();
-    void setupOTA();
+
 
 public:
     NetworkManager();
@@ -42,10 +42,10 @@ public:
     void getDeviceTopic(const char* suffix, char* buffer, size_t len);
     void publishDevice(const char* suffix, const char* payload);
 
-    bool isOTA(); // Check if OTA is running
+
 
 private:
-    bool otaInProgress = false;
+
 };
 
 #endif

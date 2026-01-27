@@ -25,8 +25,8 @@ private:
 
     unsigned long stateStartTime;
     const unsigned long WATERING_DURATION = 5000; // 5 seconds
-    const unsigned long SOAK_DURATION = 1000 * 60 * 10;    // 10 minutes
-    const unsigned long CHECK_INTERVAL = 1000 * 60 * 20; // 20 minutes
+    const unsigned long SOAK_DURATION = 1000 * 60 * 1;    // 1 minutes
+    const unsigned long CHECK_INTERVAL = 1000 * 30; // 30 seconds
     const int RISE_THRESHOLD = 2; // 2% rise expected
 
     char failMessage[100];
@@ -34,6 +34,7 @@ private:
     void setState(State newState);
     void turnPump(bool on);
     void broadcastStatus();
+    bool needsWater();
 
 public:
     PlantControl(SensorManager* s, NetworkManager* n, ConfigManager* c);

@@ -7,7 +7,11 @@ class AuthController {
             const user = await authService.register(username, password);
             res.json({ user });
         } catch (e) {
-            res.status(500).json({ error: "User exists or error" });
+            if (e.code === '23505') { // Unique violation
+                return res.status(400).json({ error: "Username already exists" });
+            }
+            console.error(e);
+            res.status(500).json({ error: "Server Error" });
         }
     }
 

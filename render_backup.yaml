@@ -1,0 +1,27 @@
+services:
+  # Backend API
+  - type: web
+    name: plantcare-backend
+    env: docker
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    plan: free
+    region: singapore # Optional: Choose closest region
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: MQTT_BROKER
+        sync: false # User must provide this manually
+      - key: DATABASE_URL
+        fromDatabase:
+          name: plantcare-db
+          property: connectionString
+
+databases:
+  - name: plantcare-db
+    plan: free
+    databaseName: plantcaredb
+    user: plantcare_user
+
+# Note: Render Free Tier Postgres expires after 90 days. 
+# For long term, upgrade or use an external managed DB.

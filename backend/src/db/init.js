@@ -34,6 +34,10 @@ const initDb = async () => {
     try {
       await db.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS claim_token VARCHAR(255);`);
       await db.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS nickname VARCHAR(255);`);
+      await db.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT false;`);
+      await db.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP;`);
+      await db.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS status VARCHAR(50);`);
+      await db.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS config JSONB DEFAULT '{}'::jsonb;`);
 
       // Cleanup: Remove owner_id
       await db.query(`ALTER TABLE devices DROP COLUMN IF EXISTS owner_id;`);

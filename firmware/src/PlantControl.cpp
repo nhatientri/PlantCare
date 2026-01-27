@@ -78,7 +78,8 @@ void PlantControl::update() {
                     float avg = sensors->getAverageMoisture();
                     int threshold = config->loadThreshold();
                     
-                    if (avg < threshold) {
+                    
+                    if (needsWater()) {
                          // Check Time: Morning (6-10) OR Afternoon (16-19)
                          int h = network->getHour();
                          int mStart = config->loadMorningStart();
@@ -90,11 +91,9 @@ void PlantControl::update() {
                          bool isAfternoon = (h >= aStart && h < aEnd);
                          
                          if (isMorning || isAfternoon) {
-                             if (needsWater()) {
                                  // Snapshot usage for validation logic later
                                  sensors->snapshotMoisture();
                                  setState(WATERING);
-                             }
                          } else {
                              // Restricted time
                              if (elapsed > 3600000) { // Log once an hour

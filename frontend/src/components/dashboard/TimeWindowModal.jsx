@@ -11,14 +11,22 @@ export default function TimeWindowModal({ isOpen, onClose, currentWindows, onSav
 
     useEffect(() => {
         if (isOpen && currentWindows) {
-            setMStart(currentWindows.m_start || 6)
-            setMEnd(currentWindows.m_end || 10)
-            setAStart(currentWindows.a_start || 16)
-            setAEnd(currentWindows.a_end || 19)
+            setMStart(currentWindows.m_start ?? 6)
+            setMEnd(currentWindows.m_end ?? 10)
+            setAStart(currentWindows.a_start ?? 16)
+            setAEnd(currentWindows.a_end ?? 19)
         }
     }, [isOpen, currentWindows])
 
     const handleSave = async () => {
+        if (mEnd <= mStart) {
+            alert("Morning End time must be after Start time")
+            return
+        }
+        if (aEnd <= aStart) {
+            alert("Afternoon End time must be after Start time")
+            return
+        }
         setIsSaving(true)
         await onSave(mStart, mEnd, aStart, aEnd)
         setIsSaving(false)
@@ -62,7 +70,7 @@ export default function TimeWindowModal({ isOpen, onClose, currentWindows, onSav
                                     onChange={(e) => setMStart(parseInt(e.target.value))}
                                     className="w-full bg-white border border-orange-200 rounded-xl px-3 py-2 text-plant-dark focus:outline-none focus:ring-2 focus:ring-orange-500/20"
                                 >
-                                    {[...Array(24).keys()].map(h => (
+                                    {[...Array(25).keys()].map(h => (
                                         <option key={h} value={h}>{h}:00</option>
                                     ))}
                                 </select>
@@ -75,7 +83,7 @@ export default function TimeWindowModal({ isOpen, onClose, currentWindows, onSav
                                     onChange={(e) => setMEnd(parseInt(e.target.value))}
                                     className="w-full bg-white border border-orange-200 rounded-xl px-3 py-2 text-plant-dark focus:outline-none focus:ring-2 focus:ring-orange-500/20"
                                 >
-                                    {[...Array(24).keys()].map(h => (
+                                    {[...Array(25).keys()].map(h => (
                                         <option key={h} value={h}>{h}:00</option>
                                     ))}
                                 </select>
@@ -97,7 +105,7 @@ export default function TimeWindowModal({ isOpen, onClose, currentWindows, onSav
                                     onChange={(e) => setAStart(parseInt(e.target.value))}
                                     className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-plant-dark focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                                 >
-                                    {[...Array(24).keys()].map(h => (
+                                    {[...Array(25).keys()].map(h => (
                                         <option key={h} value={h}>{h}:00</option>
                                     ))}
                                 </select>
@@ -110,7 +118,7 @@ export default function TimeWindowModal({ isOpen, onClose, currentWindows, onSav
                                     onChange={(e) => setAEnd(parseInt(e.target.value))}
                                     className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-plant-dark focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                                 >
-                                    {[...Array(24).keys()].map(h => (
+                                    {[...Array(25).keys()].map(h => (
                                         <option key={h} value={h}>{h}:00</option>
                                     ))}
                                 </select>
